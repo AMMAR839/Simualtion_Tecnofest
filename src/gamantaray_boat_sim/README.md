@@ -5,7 +5,7 @@ Workspace ini membuat `Assembly 2.0.obj` menjadi model kapal Gazebo di world lau
 ## setup
 
 ```bash
-git clone https://github.com/gamantaray-2026/kapal_agung_ws.git
+git clone https://github.com/gamantaray-2026/kapal_agung_ws.git gamataray_boat_ws
 cd kapal_agung_ws
 ```
 

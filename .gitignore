@@ -1,0 +1,18 @@
+# ROS/colcon generated output
+build/
+install/
+log/
+
+# Python generated files
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Local/editor files
+.vscode/
+.idea/
+*.swp
+*~
+
+# Generated from the compressed mesh archive during build.
+src/gamantaray_boat_sim/models/gamantaray_boat/meshes/assembly_2_0.obj

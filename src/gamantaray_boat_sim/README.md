@@ -19,16 +19,6 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
-## Upload ke GitHub
-
-```bash
-cd /home/ammar/gamantaray_boat_ws
-git status
-git push -u origin main
-```
-
-Kalau GitHub meminta login, gunakan Personal Access Token sebagai password.
-
 ## Launch
 
 ```bash

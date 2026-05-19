@@ -4,16 +4,18 @@
     <pose>0 0 0 0 0 0</pose>
 
     <link name="base_link">
+      <gravity>false</gravity>
+      <pose>0 0 0 0 0 0</pose>
       <inertial>
-        <pose>0 0 0 0 0 0</pose>
+        <pose>0 0 -0.05 0 0 0</pose>
         <mass>35.0</mass>
         <inertia>
-          <ixx>8.0</ixx>
+          <ixx>80.0</ixx>
           <ixy>0</ixy>
           <ixz>0</ixz>
-          <iyy>18.0</iyy>
+          <iyy>180.0</iyy>
           <iyz>0</iyz>
-          <izz>22.0</izz>
+          <izz>120.0</izz>
         </inertia>
       </inertial>
 
@@ -34,6 +36,11 @@
             <size>2.4 1.35 0.45</size>
           </box>
         </geometry>
+        <surface>
+          <contact>
+            <collide_without_contact>false</collide_without_contact>
+          </contact>
+        </surface>
       </collision>
 
       <visual name="left_thruster_visual">
@@ -62,8 +69,100 @@
         </material>
       </visual>
 
-      <sensor name="front_camera" type="camera">
-        <pose>0.85 0 0.55 0 0.17 0</pose>
+      <visual name="lidar_mast_visual">
+        <pose>0.15 0 0.85 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.025</radius>
+            <length>1.15</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <diffuse>0.65 0.65 0.65 1</diffuse>
+        </material>
+      </visual>
+
+      <visual name="sensor_crossbar_visual">
+        <pose>0.15 0 1.43 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.16 0.55 0.05</size>
+          </box>
+        </geometry>
+        <material>
+          <diffuse>0.72 0.72 0.72 1</diffuse>
+        </material>
+      </visual>
+
+      <sensor name="imu_sensor" type="imu">
+        <topic>/asv/imu/data</topic>
+        <always_on>true</always_on>
+        <update_rate>100</update_rate>
+      </sensor>
+
+      <sensor name="gps_sensor" type="navsat">
+        <pose>0.15 0 1.45 0 0 0</pose>
+        <topic>/asv/gps/fix</topic>
+        <always_on>true</always_on>
+        <update_rate>10</update_rate>
+        <navsat>
+          <position_sensing>
+            <horizontal>
+              <noise type="gaussian">
+                <mean>0</mean>
+                <stddev>0.4</stddev>
+              </noise>
+            </horizontal>
+            <vertical>
+              <noise type="gaussian">
+                <mean>0</mean>
+                <stddev>0.8</stddev>
+              </noise>
+            </vertical>
+          </position_sensing>
+        </navsat>
+      </sensor>
+
+      <sensor name="lidar_sensor" type="gpu_lidar">
+        <pose>0.35 0 1.42 0 0 0</pose>
+        <topic>/asv/lidar/scan</topic>
+        <always_on>true</always_on>
+        <visualize>true</visualize>
+        <update_rate>15</update_rate>
+        <lidar>
+          <scan>
+            <horizontal>
+              <samples>720</samples>
+              <resolution>1</resolution>
+              <min_angle>-3.14159</min_angle>
+              <max_angle>3.14159</max_angle>
+            </horizontal>
+            <vertical>
+              <samples>1</samples>
+              <resolution>1</resolution>
+              <min_angle>0</min_angle>
+              <max_angle>0</max_angle>
+            </vertical>
+          </scan>
+          <range>
+            <min>0.35</min>
+            <max>35.0</max>
+            <resolution>0.02</resolution>
+          </range>
+          <noise>
+            <type>gaussian</type>
+            <mean>0.0</mean>
+            <stddev>0.015</stddev>
+          </noise>
+        </lidar>
+      </sensor>
+
+      <sensor name="front_camera_sensor" type="camera">
+        <pose>0.85 0 1.25 0 0.10 0</pose>
+        <topic>/asv/camera/front/image</topic>
+        <always_on>true</always_on>
+        <update_rate>20</update_rate>
+        <visualize>true</visualize>
         <camera>
           <horizontal_fov>1.3962634</horizontal_fov>
           <image>
@@ -73,40 +172,187 @@
           </image>
           <clip>
             <near>0.05</near>
-            <far>120</far>
+            <far>80.0</far>
           </clip>
         </camera>
-        <always_on>true</always_on>
-        <update_rate>30</update_rate>
-        <visualize>true</visualize>
-        <topic>front_camera/image</topic>
-      </sensor>
-
-      <sensor name="front_lidar" type="gpu_lidar">
-        <pose>0.65 0 0.75 0 0 0</pose>
-        <lidar>
-          <scan>
-            <horizontal>
-              <samples>720</samples>
-              <resolution>1</resolution>
-              <min_angle>-2.35619</min_angle>
-              <max_angle>2.35619</max_angle>
-            </horizontal>
-          </scan>
-          <range>
-            <min>0.15</min>
-            <max>60.0</max>
-            <resolution>0.01</resolution>
-          </range>
-        </lidar>
-        <always_on>true</always_on>
-        <update_rate>10</update_rate>
-        <visualize>true</visualize>
-        <topic>front_lidar/scan</topic>
       </sensor>
     </link>
 
-    <plugin filename="gz-sim-velocity-control-system" name="gz::sim::systems::VelocityControl"/>
+    <link name="left_propeller_link">
+      <gravity>false</gravity>
+      <pose relative_to="left_propeller_joint">0 0 0 0 0 0</pose>
+      <visual name="left_propeller_visual">
+        <pose>0 0 0 0 1.570796 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.075</radius>
+            <length>0.025</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <diffuse>0.05 0.05 0.05 1</diffuse>
+          <specular>0.4 0.4 0.4 1</specular>
+        </material>
+      </visual>
+      <collision name="left_propeller_collision">
+        <pose>0 0 0 0 1.570796 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.075</radius>
+            <length>0.025</length>
+          </cylinder>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass>0.10</mass>
+        <inertia>
+          <ixx>0.00010</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.00010</iyy>
+          <iyz>0</iyz>
+          <izz>0.00015</izz>
+        </inertia>
+      </inertial>
+    </link>
+    <joint name="left_propeller_joint" type="revolute">
+      <pose relative_to="base_link">-0.95 0.45 -0.05 0 0 0</pose>
+      <parent>base_link</parent>
+      <child>left_propeller_link</child>
+      <axis>
+        <xyz>1 0 0</xyz>
+        <limit>
+          <lower>-1e+16</lower>
+          <upper>1e+16</upper>
+          <effort>120</effort>
+          <velocity>900</velocity>
+        </limit>
+        <dynamics>
+          <damping>0.04</damping>
+          <friction>0.01</friction>
+        </dynamics>
+      </axis>
+    </joint>
 
+    <link name="right_propeller_link">
+      <gravity>false</gravity>
+      <pose relative_to="right_propeller_joint">0 0 0 0 0 0</pose>
+      <visual name="right_propeller_visual">
+        <pose>0 0 0 0 1.570796 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.075</radius>
+            <length>0.025</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <diffuse>0.05 0.05 0.05 1</diffuse>
+          <specular>0.4 0.4 0.4 1</specular>
+        </material>
+      </visual>
+      <collision name="right_propeller_collision">
+        <pose>0 0 0 0 1.570796 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.075</radius>
+            <length>0.025</length>
+          </cylinder>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass>0.10</mass>
+        <inertia>
+          <ixx>0.00010</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.00010</iyy>
+          <iyz>0</iyz>
+          <izz>0.00015</izz>
+        </inertia>
+      </inertial>
+    </link>
+    <joint name="right_propeller_joint" type="revolute">
+      <pose relative_to="base_link">-0.95 -0.45 -0.05 0 0 0</pose>
+      <parent>base_link</parent>
+      <child>right_propeller_link</child>
+      <axis>
+        <xyz>1 0 0</xyz>
+        <limit>
+          <lower>-1e+16</lower>
+          <upper>1e+16</upper>
+          <effort>120</effort>
+          <velocity>900</velocity>
+        </limit>
+        <dynamics>
+          <damping>0.04</damping>
+          <friction>0.01</friction>
+        </dynamics>
+      </axis>
+    </joint>
+
+    <plugin filename="gz-sim-joint-state-publisher-system"
+            name="gz::sim::systems::JointStatePublisher"/>
+
+    <plugin filename="gz-sim-odometry-publisher-system"
+            name="gz::sim::systems::OdometryPublisher">
+      <odom_frame>odom</odom_frame>
+      <robot_base_frame>base_link</robot_base_frame>
+      <odom_publish_frequency>30</odom_publish_frequency>
+      <odom_topic>/asv/odom</odom_topic>
+      <dimensions>2</dimensions>
+    </plugin>
+
+    <plugin filename="gz-sim-hydrodynamics-system"
+            name="gz::sim::systems::Hydrodynamics">
+      <link_name>base_link</link_name>
+      <xU>-8.0</xU>
+      <yV>-70.0</yV>
+      <zW>0.0</zW>
+      <kP>-220.0</kP>
+      <mQ>-220.0</mQ>
+      <nR>-8.0</nR>
+      <xUabsU>-4.0</xUabsU>
+      <yVabsV>-110.0</yVabsV>
+      <zWabsW>0.0</zWabsW>
+      <kPabsP>-90.0</kPabsP>
+      <mQabsQ>-90.0</mQabsQ>
+      <nRabsR>-12.0</nRabsR>
+    </plugin>
+
+    <plugin filename="gz-sim-joint-controller-system"
+            name="gz::sim::systems::JointController">
+      <joint_name>left_propeller_joint</joint_name>
+      <initial_velocity>0.0</initial_velocity>
+      <p_gain>0.15</p_gain>
+    </plugin>
+    <plugin filename="gz-sim-joint-controller-system"
+            name="gz::sim::systems::JointController">
+      <joint_name>right_propeller_joint</joint_name>
+      <initial_velocity>0.0</initial_velocity>
+      <p_gain>0.15</p_gain>
+    </plugin>
+
+    <plugin filename="gz-sim-thruster-system"
+            name="gz::sim::systems::Thruster">
+      <joint_name>left_propeller_joint</joint_name>
+      <thrust_coefficient>0.01</thrust_coefficient>
+      <fluid_density>1000</fluid_density>
+      <propeller_diameter>0.15</propeller_diameter>
+      <velocity_control>true</velocity_control>
+      <use_angvel_cmd>false</use_angvel_cmd>
+      <max_thrust_cmd>120</max_thrust_cmd>
+      <min_thrust_cmd>-70</min_thrust_cmd>
+    </plugin>
+    <plugin filename="gz-sim-thruster-system"
+            name="gz::sim::systems::Thruster">
+      <joint_name>right_propeller_joint</joint_name>
+      <thrust_coefficient>0.01</thrust_coefficient>
+      <fluid_density>1000</fluid_density>
+      <propeller_diameter>0.15</propeller_diameter>
+      <velocity_control>true</velocity_control>
+      <use_angvel_cmd>false</use_angvel_cmd>
+      <max_thrust_cmd>120</max_thrust_cmd>
+      <min_thrust_cmd>-70</min_thrust_cmd>
+    </plugin>
   </model>
 </sdf>

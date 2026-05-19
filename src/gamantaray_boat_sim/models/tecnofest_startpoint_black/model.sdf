@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <model name="tecnofest_startpoint_black">
+    <static>true</static>
+    <link name="marker">
+      <visual name="black_disk">
+        <pose>0 0 0.035 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.50</radius>
+            <length>0.07</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.005 0.005 0.005 1</ambient>
+          <diffuse>0.015 0.015 0.015 1</diffuse>
+          <specular>0.03 0.03 0.03 1</specular>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

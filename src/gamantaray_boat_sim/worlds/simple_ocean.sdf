@@ -135,7 +135,7 @@
           <geometry>
             <plane>
               <normal>0 0 1</normal>
-              <size>400 400</size>
+              <size>100 20</size>
             </plane>
           </geometry>
           <material>

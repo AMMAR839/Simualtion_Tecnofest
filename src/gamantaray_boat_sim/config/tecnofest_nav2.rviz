@@ -1,0 +1,223 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 78
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /TF1
+        - /Boat Model1
+        - /LiDAR1
+        - /LiDAR Obstacles1
+        - /Global Path1
+        - /Global Costmap1
+        - /Local Costmap1
+      Splitter Ratio: 0.5
+    Tree Height: 712
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Cell Size: 2
+      Color: 160; 160; 160
+      Enabled: true
+      Line Style:
+        Line Width: 0.03
+        Value: Lines
+      Name: Grid
+      Plane: XY
+      Plane Cell Count: 60
+      Reference Frame: odom
+      Value: true
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Frame Timeout: 15
+      Frames:
+        All Enabled: true
+      Marker Scale: 0.6
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: false
+      Tree:
+        {}
+      Update Interval: 0
+      Value: true
+    - Class: rviz_default_plugins/Odometry
+      Angle Tolerance: 0.1
+      Color: 255; 255; 255
+      Enabled: true
+      Keep: 250
+      Name: ASV Odom Trail
+      Position Tolerance: 0.1
+      Shape: Arrow
+      Topic:
+        Value: /asv/odom
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Boat Model
+      Namespaces:
+        asv_mesh: true
+        bow_direction: true
+        front_camera: true
+        hull: true
+        hull_deck: true
+        left_propeller: true
+        left_thruster: true
+        lidar_mast: true
+        lidar_sensor: true
+        right_propeller: true
+        right_thruster: true
+        sensor_crossbar: true
+      Topic:
+        Durability Policy: Transient Local
+        Reliability Policy: Reliable
+        Value: /asv/visualization/boat_model
+      Value: true
+    - Class: rviz_default_plugins/LaserScan
+      Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Channel Name: intensity
+      Color: 255; 80; 40
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: true
+      Name: LiDAR
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.12
+      Style: Points
+      Topic:
+        Durability Policy: Volatile
+        Reliability Policy: Best Effort
+        Value: /asv/lidar/scan
+      Use Fixed Frame: true
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: LiDAR Obstacles
+      Namespaces:
+        lidar_cluster: true
+      Topic:
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+        Value: /asv/perception/lidar_obstacles
+      Value: true
+    - Alpha: 0.55
+      Class: rviz_default_plugins/Map
+      Color Scheme: costmap
+      Draw Behind: true
+      Enabled: true
+      Name: Global Costmap
+      Topic:
+        Durability Policy: Transient Local
+        Reliability Policy: Reliable
+        Value: /global_costmap/costmap
+      Update Topic:
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+        Value: /global_costmap/costmap_updates
+      Use Timestamp: false
+      Value: true
+    - Alpha: 0.72
+      Class: rviz_default_plugins/Map
+      Color Scheme: costmap
+      Draw Behind: false
+      Enabled: true
+      Name: Local Costmap
+      Topic:
+        Durability Policy: Transient Local
+        Reliability Policy: Reliable
+        Value: /local_costmap/costmap
+      Update Topic:
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+        Value: /local_costmap/costmap_updates
+      Use Timestamp: false
+      Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz_default_plugins/Path
+      Color: 45; 160; 255
+      Enabled: true
+      Head Diameter: 0.35
+      Head Length: 0.25
+      Length: 0.25
+      Line Style: Billboards
+      Line Width: 0.18
+      Name: Global Path
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0.45
+      Pose Color: 45; 160; 255
+      Pose Style: None
+      Radius: 0.06
+      Shaft Diameter: 0.12
+      Shaft Length: 0.25
+      Topic:
+        Value: /plan
+      Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz_default_plugins/Path
+      Color: 50; 255; 120
+      Enabled: true
+      Line Style: Billboards
+      Line Width: 0.10
+      Name: Smoothed Path
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0.55
+      Pose Color: 50; 255; 120
+      Pose Style: None
+      Topic:
+        Value: /plan_smoothed
+      Value: true
+  Enabled: true
+  Global Options:
+    Background Color: 30; 34; 38
+    Fixed Frame: odom
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/Measure
+    - Class: rviz_default_plugins/SetInitialPose
+      Topic:
+        Value: /initialpose
+    - Class: rviz_default_plugins/SetGoal
+      Topic:
+        Value: /goal_pose
+  Transformation:
+    Current:
+      Class: rviz_default_plugins/TF
+  Value: true
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 28
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+      Name: Follow ASV
+      Pitch: 1.25
+      Target Frame: base_link
+      Yaw: 0.0
+    Saved: ~
+Window Geometry:
+  Height: 1048
+  Width: 926
+  X: 994
+  Y: 32

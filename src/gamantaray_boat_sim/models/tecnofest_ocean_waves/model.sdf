@@ -15,7 +15,7 @@
              objects in tecnofest_asv_course.sdf. The DAE base mesh is 100 m x
              20 m, so the mesh scale below matches this 104 m x 26 m tile. -->
         <tile_size>104 26</tile_size>
-        <cell_count>256</cell_count>
+        <cell_count>128</cell_count>
         <wind_speed>5</wind_speed>
         <wind_angle_deg>135</wind_angle_deg>
         <amplitude>0.025</amplitude>
@@ -51,7 +51,7 @@
             <!-- `fft` wave parameters -->
             <algorithm>fft</algorithm>
             <tile_size>104 26</tile_size>
-            <cell_count>256</cell_count>
+            <cell_count>128</cell_count>
             <wind_speed>5</wind_speed>
             <wind_angle_deg>135</wind_angle_deg>
             <amplitude>0.025</amplitude>
@@ -173,7 +173,7 @@
           <wave>
             <algorithm>fft</algorithm>
             <tile_size>104 26</tile_size>
-            <cell_count>256</cell_count>
+            <cell_count>128</cell_count>
             <wind_speed>5</wind_speed>
             <wind_angle_deg>135</wind_angle_deg>
             <amplitude>0.025</amplitude>

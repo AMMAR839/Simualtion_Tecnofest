@@ -1,6 +1,16 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, SetEnvironmentVariable, TimerAction
+from launch.actions import (
+    DeclareLaunchArgument,
+    EmitEvent,
+    ExecuteProcess,
+    IncludeLaunchDescription,
+    RegisterEventHandler,
+    SetEnvironmentVariable,
+    TimerAction,
+)
 from launch.conditions import IfCondition
+from launch.event_handlers import OnProcessExit
+from launch.events import Shutdown
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import EnvironmentVariable, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -45,12 +55,12 @@ def static_tf_args(x, y, z, roll, pitch, yaw, parent, child):
 def generate_launch_description():
     use_sim_time = LaunchConfiguration("use_sim_time")
     use_nav2 = LaunchConfiguration("use_nav2")
+    use_rviz = LaunchConfiguration("use_rviz")
     world = LaunchConfiguration("world")
     waypoint_file = LaunchConfiguration("waypoint_file")
     target_color = LaunchConfiguration("target_color")
 
     pkg_share = FindPackageShare("gamantaray_boat_sim")
-    ros_gz_sim_share = FindPackageShare("ros_gz_sim")
     nav2_bringup_share = FindPackageShare("nav2_bringup")
 
     default_world = PathJoinSubstitution(
@@ -60,6 +70,10 @@ def generate_launch_description():
         [pkg_share, "config", "tecnofest_waypoints.yaml"]
     )
     nav2_params = PathJoinSubstitution([pkg_share, "config", "nav2_params.yaml"])
+    rviz_config = PathJoinSubstitution([pkg_share, "config", "tecnofest_nav2.rviz"])
+    gazebo_gui_config = PathJoinSubstitution(
+        [pkg_share, "config", "tecnofest_gazebo_gui.config"]
+    )
 
     resource_paths = [
         PathJoinSubstitution([pkg_share]),
@@ -73,10 +87,26 @@ def generate_launch_description():
         EnvironmentVariable("GZ_SIM_SYSTEM_PLUGIN_PATH", default_value=""),
     ]
 
+    gazebo = ExecuteProcess(
+        cmd=[
+            "gz",
+            "sim",
+            "-r",
+            "-v",
+            "3",
+            "--gui-config",
+            gazebo_gui_config,
+            world,
+        ],
+        output="screen",
+        name="gazebo",
+    )
+
     return LaunchDescription(
         [
             DeclareLaunchArgument("use_sim_time", default_value="true"),
             DeclareLaunchArgument("use_nav2", default_value="true"),
+            DeclareLaunchArgument("use_rviz", default_value="true"),
             DeclareLaunchArgument("target_color", default_value="green"),
             DeclareLaunchArgument("world", default_value=default_world),
             DeclareLaunchArgument("waypoint_file", default_value=default_waypoints),
@@ -98,13 +128,18 @@ def generate_launch_description():
                     plugin_paths + [EnvironmentVariable("LD_LIBRARY_PATH", default_value="")]
                 ),
             ),
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(
-                    PathJoinSubstitution(
-                        [ros_gz_sim_share, "launch", "gz_sim.launch.py"]
-                    )
-                ),
-                launch_arguments={"gz_args": ["-r -v 3 ", world]}.items(),
+            gazebo,
+            RegisterEventHandler(
+                OnProcessExit(
+                    target_action=gazebo,
+                    on_exit=[
+                        EmitEvent(
+                            event=Shutdown(
+                                reason="Gazebo exited; shutting down ROS/Nav2 stack"
+                            )
+                        )
+                    ],
+                )
             ),
             Node(
                 package="ros_gz_bridge",
@@ -178,14 +213,33 @@ def generate_launch_description():
                 executable="odom_tf_broadcaster",
                 name="odom_tf_broadcaster",
                 output="screen",
-                parameters=[{"use_sim_time": use_sim_time}],
+                parameters=[
+                    {
+                        "use_sim_time": use_sim_time,
+                        "odom_topic": "/asv/odom",
+                        "odom_frame": "odom",
+                        "base_frame": "base_link",
+                    }
+                ],
             ),
             Node(
                 package="gamantaray_boat_sim",
                 executable="cmd_vel_to_thrusters",
                 name="cmd_vel_to_thrusters",
                 output="screen",
-                parameters=[{"use_sim_time": use_sim_time}],
+                parameters=[
+                    {
+                        "use_sim_time": use_sim_time,
+                        "max_forward_thrust_n": 18.0,
+                        "max_reverse_thrust_n": 8.0,
+                        "max_speed_cmd_mps": 0.60,
+                        "yaw_to_thrust_n_per_radps": 12.0,
+                        "yaw_sign": 1.0,
+                        "max_yaw_rate_cmd_radps": 0.70,
+                        "cmd_timeout_s": 0.8,
+                        "thrust_slew_rate_nps": 28.0,
+                    }
+                ],
             ),
             Node(
                 package="gamantaray_boat_sim",
@@ -196,6 +250,37 @@ def generate_launch_description():
                     {
                         "use_sim_time": use_sim_time,
                         "target_color": target_color,
+                    }
+                ],
+            ),
+            Node(
+                package="gamantaray_boat_sim",
+                executable="rviz_boat_marker",
+                name="rviz_boat_marker",
+                output="screen",
+                condition=IfCondition(use_rviz),
+                parameters=[
+                    {
+                        "use_sim_time": use_sim_time,
+                        "use_heavy_mesh": False,
+                        "odom_topic": "/asv/odom",
+                        "fixed_frame": "odom",
+                        "publish_in_fixed_frame": True,
+                    }
+                ],
+            ),
+            Node(
+                package="gamantaray_boat_sim",
+                executable="lidar_obstacle_marker",
+                name="lidar_obstacle_marker",
+                output="screen",
+                condition=IfCondition(use_rviz),
+                parameters=[
+                    {
+                        "use_sim_time": use_sim_time,
+                        "scan_topic": "/asv/lidar/scan",
+                        "marker_topic": "/asv/perception/lidar_obstacles",
+                        "max_range": 18.0,
                     }
                 ],
             ),
@@ -218,6 +303,20 @@ def generate_launch_description():
                 ],
             ),
             TimerAction(
+                period=14.0,
+                actions=[
+                    Node(
+                        package="rviz2",
+                        executable="rviz2",
+                        name="tecnofest_nav2_rviz",
+                        output="screen",
+                        condition=IfCondition(use_rviz),
+                        arguments=["-d", rviz_config],
+                        parameters=[{"use_sim_time": use_sim_time}],
+                    )
+                ],
+            ),
+            TimerAction(
                 period=24.0,
                 actions=[
                     Node(
@@ -231,6 +330,9 @@ def generate_launch_description():
                                 "waypoint_file": waypoint_file,
                                 "target_color": target_color,
                                 "start_delay_s": 2.0,
+                                "use_through_poses": False,
+                                "prereq_timeout_s": 90.0,
+                                "waypoint_acceptance_radius_m": 1.35,
                             }
                         ],
                     )

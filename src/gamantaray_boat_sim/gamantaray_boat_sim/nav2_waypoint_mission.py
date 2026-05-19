@@ -1,3 +1,4 @@
+import math
 import time
 from pathlib import Path
 
@@ -5,11 +6,26 @@ import rclpy
 import yaml
 from geometry_msgs.msg import PoseStamped
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
+from nav_msgs.msg import Odometry
 from rclpy._rclpy_pybind11 import RCLError
+from rclpy.duration import Duration
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.parameter import Parameter
+from rclpy.qos import QoSProfile, ReliabilityPolicy
+from rclpy.time import Time
+from rosgraph_msgs.msg import Clock
+from sensor_msgs.msg import LaserScan
 from std_msgs.msg import String
+from tf2_ros import Buffer, TransformListener
+
+
+def yaw_to_quaternion(yaw):
+    pose_orientation = {
+        "z": math.sin(yaw * 0.5),
+        "w": math.cos(yaw * 0.5),
+    }
+    return pose_orientation
 
 
 class Nav2WaypointMission(Node):
@@ -17,8 +33,26 @@ class Nav2WaypointMission(Node):
         super().__init__("nav2_waypoint_mission")
         self.declare_parameter("waypoint_file", "")
         self.declare_parameter("frame_id", "odom")
+        self.declare_parameter("base_frame", "base_link")
         self.declare_parameter("start_delay_s", 8.0)
+        self.declare_parameter("use_through_poses", False)
+        self.declare_parameter("prereq_timeout_s", 90.0)
+        self.declare_parameter("waypoint_acceptance_radius_m", 1.35)
         self.status_pub = self.create_publisher(String, "/asv/navigation/status", 10)
+        self.clock_seen = False
+        self.odom_seen = False
+        self.scan_seen = False
+        self.last_odom_xy = None
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+        sensor_qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
+        self.prereq_subscriptions = [
+            self.create_subscription(Clock, "/clock", self.on_clock, sensor_qos),
+            self.create_subscription(Odometry, "/asv/odom", self.on_odom, sensor_qos),
+            self.create_subscription(
+                LaserScan, "/asv/lidar/scan", self.on_scan, sensor_qos
+            ),
+        ]
 
     def publish_status(self, status):
         if not rclpy.ok():
@@ -29,6 +63,19 @@ class Nav2WaypointMission(Node):
         except RCLError:
             return
         time.sleep(0.05)
+
+    def on_clock(self, _msg):
+        self.clock_seen = True
+
+    def on_odom(self, msg):
+        self.odom_seen = True
+        self.last_odom_xy = (
+            float(msg.pose.pose.position.x),
+            float(msg.pose.pose.position.y),
+        )
+
+    def on_scan(self, _msg):
+        self.scan_seen = True
 
     def start(self):
         delay = float(self.get_parameter("start_delay_s").value)
@@ -56,8 +103,12 @@ class Nav2WaypointMission(Node):
             pose.pose.orientation.w = 1.0
             waypoints.append((str(item.get("name", f"wp{len(waypoints) + 1}")), pose))
 
+        self.apply_segment_orientations(waypoints)
+
         if not waypoints:
             self.publish_status("no_waypoints")
+            return
+        if not self.wait_for_runtime_ready(frame_id):
             return
 
         navigator = BasicNavigator(node_name="asv_basic_navigator")
@@ -69,11 +120,23 @@ class Nav2WaypointMission(Node):
             navigator.waitUntilNav2Active(localizer="robot_localization")
 
             self.publish_status(f"nav2_waypoints_started:{len(waypoints)}")
+            if bool(self.get_parameter("use_through_poses").value):
+                self.run_through_poses(navigator, waypoints)
+                return
+
             for index, (name, pose) in enumerate(waypoints, start=1):
                 pose.header.stamp = navigator.get_clock().now().to_msg()
                 self.publish_status(f"nav2_waypoint_goal:{index}:{name}")
                 navigator.goToPose(pose)
+                reached_by_radius = False
                 while rclpy.ok():
+                    rclpy.spin_once(self, timeout_sec=0.0)
+                    if self.distance_to_pose(pose) <= float(
+                        self.get_parameter("waypoint_acceptance_radius_m").value
+                    ):
+                        reached_by_radius = True
+                        self.cancel_current_task(navigator)
+                        break
                     if navigator.isTaskComplete():
                         break
                     feedback = navigator.getFeedback()
@@ -84,8 +147,18 @@ class Nav2WaypointMission(Node):
                 if not rclpy.ok():
                     return
 
+                if reached_by_radius:
+                    self.publish_status(f"nav2_waypoint_reached:{index}:{name}")
+                    time.sleep(0.5)
+                    continue
+
                 result = navigator.getResult()
                 if result == TaskResult.SUCCEEDED:
+                    self.publish_status(f"nav2_waypoint_reached:{index}:{name}")
+                    continue
+                if self.distance_to_pose(pose) <= float(
+                    self.get_parameter("waypoint_acceptance_radius_m").value
+                ):
                     self.publish_status(f"nav2_waypoint_reached:{index}:{name}")
                     continue
                 if result == TaskResult.CANCELED:
@@ -104,6 +177,121 @@ class Nav2WaypointMission(Node):
                 navigator.destroy_node()
             except RCLError:
                 pass
+
+    def wait_for_runtime_ready(self, frame_id):
+        base_frame = str(self.get_parameter("base_frame").value)
+        timeout_s = float(self.get_parameter("prereq_timeout_s").value)
+        start_time = time.monotonic()
+        last_status = 0.0
+        self.publish_status("waiting_for_runtime:/clock,/asv/odom,/asv/lidar/scan,tf")
+
+        while rclpy.ok():
+            rclpy.spin_once(self, timeout_sec=0.1)
+            missing = []
+            if not self.clock_seen:
+                missing.append("clock")
+            if not self.odom_seen:
+                missing.append("odom")
+            if not self.scan_seen:
+                missing.append("lidar")
+            if not self.tf_buffer.can_transform(
+                frame_id, base_frame, Time(), timeout=Duration(seconds=0.05)
+            ):
+                missing.append(f"tf:{frame_id}->{base_frame}")
+
+            if not missing:
+                self.publish_status("runtime_ready")
+                return True
+
+            now = time.monotonic()
+            if now - last_status >= 2.0:
+                self.publish_status(f"waiting_for_runtime:{','.join(missing)}")
+                last_status = now
+
+            if timeout_s > 0.0 and now - start_time >= timeout_s:
+                self.publish_status(f"runtime_prereq_timeout:{','.join(missing)}")
+                return False
+
+        return False
+
+    def distance_to_pose(self, pose):
+        if self.last_odom_xy is None:
+            return float("inf")
+        dx = float(pose.pose.position.x) - self.last_odom_xy[0]
+        dy = float(pose.pose.position.y) - self.last_odom_xy[1]
+        return math.hypot(dx, dy)
+
+    @staticmethod
+    def cancel_current_task(navigator):
+        navigator.cancelTask()
+        start = time.monotonic()
+        while rclpy.ok() and not navigator.isTaskComplete():
+            if time.monotonic() - start > 2.0:
+                break
+            time.sleep(0.1)
+
+    def apply_segment_orientations(self, waypoints):
+        for index, (_, pose) in enumerate(waypoints):
+            if len(waypoints) == 1:
+                yaw = 0.0
+            elif index < len(waypoints) - 1:
+                next_pose = waypoints[index + 1][1]
+                yaw = math.atan2(
+                    next_pose.pose.position.y - pose.pose.position.y,
+                    next_pose.pose.position.x - pose.pose.position.x,
+                )
+            else:
+                prev_pose = waypoints[index - 1][1]
+                yaw = math.atan2(
+                    pose.pose.position.y - prev_pose.pose.position.y,
+                    pose.pose.position.x - prev_pose.pose.position.x,
+                )
+            quat = yaw_to_quaternion(yaw)
+            pose.pose.orientation.z = quat["z"]
+            pose.pose.orientation.w = quat["w"]
+
+    def run_through_poses(self, navigator, waypoints):
+        poses = []
+        for _, pose in waypoints:
+            pose.header.stamp = navigator.get_clock().now().to_msg()
+            poses.append(pose)
+
+        self.publish_status(f"nav2_through_poses_goal:{len(poses)}")
+        accepted = navigator.goThroughPoses(poses)
+        if not accepted:
+            self.publish_status("nav2_through_poses_rejected")
+            return
+
+        last_remaining = None
+        while rclpy.ok():
+            if navigator.isTaskComplete():
+                break
+            feedback = navigator.getFeedback()
+            if feedback:
+                remaining = int(feedback.number_of_poses_remaining)
+                if remaining != last_remaining:
+                    completed = len(waypoints) - remaining
+                    active_index = max(1, min(len(waypoints), completed + 1))
+                    active_name = waypoints[active_index - 1][0]
+                    self.publish_status(
+                        f"nav2_through_poses_active:{active_index}:{active_name}:remaining:{remaining}"
+                    )
+                    last_remaining = remaining
+            time.sleep(1.0)
+
+        if not rclpy.ok():
+            return
+
+        result = navigator.getResult()
+        if result == TaskResult.SUCCEEDED:
+            for index, (name, _) in enumerate(waypoints, start=1):
+                self.publish_status(f"nav2_waypoint_reached:{index}:{name}")
+            self.publish_status("nav2_waypoints_succeeded")
+            return
+        if result == TaskResult.CANCELED:
+            self.publish_status("nav2_waypoints_canceled")
+            return
+        self.publish_status("nav2_waypoints_failed")
 
 
 def main(args=None):

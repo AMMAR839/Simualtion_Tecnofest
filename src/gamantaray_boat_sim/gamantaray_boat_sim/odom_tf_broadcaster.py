@@ -13,6 +13,7 @@ class OdomTfBroadcaster(Node):
     def __init__(self):
         super().__init__("odom_tf_broadcaster")
         self.declare_parameter("odom_topic", "/asv/odom")
+        self.declare_parameter("odom_frame", "odom")
         self.declare_parameter("base_frame", "base_link")
         self.broadcaster = TransformBroadcaster(self)
         self.create_subscription(
@@ -28,7 +29,8 @@ class OdomTfBroadcaster(Node):
         )
 
         stamped = TransformStamped()
-        stamped.header = msg.header
+        stamped.header.stamp = msg.header.stamp
+        stamped.header.frame_id = str(self.get_parameter("odom_frame").value) or "odom"
         stamped.child_frame_id = str(self.get_parameter("base_frame").value)
         stamped.transform.translation.x = transform.position.x
         stamped.transform.translation.y = transform.position.y

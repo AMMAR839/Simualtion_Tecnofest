@@ -50,7 +50,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'worlds'), glob('worlds/*.sdf')),
-        (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
+        (os.path.join('share', package_name, 'config'), package_files('config')),
         *[
             (os.path.join('share', package_name, os.path.dirname(path)), [path])
             for path in package_files('models')
@@ -73,6 +73,8 @@ setup(
             'odom_tf_broadcaster = gamantaray_boat_sim.odom_tf_broadcaster:main',
             'target_buoy_detector = gamantaray_boat_sim.target_buoy_detector:main',
             'nav2_waypoint_mission = gamantaray_boat_sim.nav2_waypoint_mission:main',
+            'rviz_boat_marker = gamantaray_boat_sim.rviz_boat_marker:main',
+            'lidar_obstacle_marker = gamantaray_boat_sim.lidar_obstacle_marker:main',
         ],
     },
 )

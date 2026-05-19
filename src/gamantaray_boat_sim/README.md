@@ -53,10 +53,47 @@ Jalankan hanya Gazebo, bridge, sensor, dan kontrol thruster untuk tes manual:
 ros2 launch gamantaray_boat_sim simple_ocean_gamantaray.launch.py use_nav2:=false
 ```
 
+RViz akan terbuka otomatis untuk menampilkan `/plan`, costmap, TF, odometry,
+LiDAR, marker obstacle LiDAR, dan marker model kapal. Marker kapal di RViz
+memakai proxy ringan agar RViz tetap responsif; mesh `.obj` asli kapal tetap
+ditampilkan di Gazebo. View RViz memakai target frame `base_link`, jadi kamera
+RViz mengikuti pergerakan kapal. Launch juga memakai GUI config Gazebo khusus
+agar panel/tab Gazebo disembunyikan dan jendela Gazebo/RViz dibuka dengan
+layout seperti referensi: Gazebo di kiri mulai setelah dock Ubuntu, RViz di
+kanan. Pada Wayland, window manager masih bisa mengabaikan posisi absolut
+window, tetapi ukuran dan layout RViz/Gazebo sudah disiapkan dari config
+package.
+
+Jika jendela Gazebo ditutup, launch akan ikut mematikan bridge, Nav2, dan node
+ROS lain. Ini sengaja dibuat supaya Nav2 tidak berjalan tanpa `/clock`,
+`/asv/odom`, dan `/asv/lidar/scan`. Node misi waypoint juga menunggu `/clock`,
+odom, LiDAR, dan TF `odom -> base_link` aktif sebelum mengirim goal Nav2.
+
+Untuk mengejar RTF lebih ringan tanpa visualisasi path, jalankan:
+
+```bash
+ros2 launch gamantaray_boat_sim simple_ocean_gamantaray.launch.py use_rviz:=false
+```
+
+RViz bisa dipakai sebagai tampilan utama navigasi. Gazebo tetap diperlukan
+sebagai simulator fisika kapal, thruster, wave, buoy, LiDAR, kamera, dan odom;
+RViz hanya viewer untuk path dan data ROS. Jadi mode kerja yang disarankan
+untuk debugging navigasi adalah membuka RViz dan memakai Gazebo hanya sebagai
+simulator di belakang. Jika ingin paling ringan, tutup/minimize tampilan Gazebo
+dan fokus pada RViz. Opsi benar-benar headless dapat ditambahkan kemudian agar
+Gazebo server berjalan tanpa GUI.
+
 Waypoint default ada di:
 
 ```text
 src/gamantaray_boat_sim/config/tecnofest_waypoints.yaml
+```
+
+Panduan lengkap untuk mengatur waypoint, Nav2, costmap, LiDAR, path RViz, dan
+thruster ada di:
+
+```text
+src/gamantaray_boat_sim/NAVIGATION.md
 ```
 
 ## Kontrol Manual
@@ -75,6 +112,10 @@ Belok kiri:
 ```bash
 ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.5}, angular: {z: 0.8}}" -r 10
 ```
+
+Jika hasil tes manual menunjukkan `angular.z` positif justru membuat kapal
+belok ke arah berlawanan, ubah parameter `yaw_sign` pada node
+`cmd_vel_to_thrusters` dari `1.0` ke `-1.0` di launch file.
 
 Stop:
 
@@ -101,6 +142,11 @@ Sensor dan navigasi:
 - `/asv/camera/front/camera_info`
 - `/asv/perception/target_selection`
 - `/asv/navigation/status`
+- `/plan`
+- `/global_costmap/costmap`
+- `/local_costmap/costmap`
+- `/asv/visualization/boat_model`
+- `/asv/perception/lidar_obstacles`
 
 Frame sensor dari Gazebo memakai nama aktual:
 

@@ -6,6 +6,7 @@
     <link name="base_link">
       <gravity>false</gravity>
       <pose>0 0 0 0 0 0</pose>
+      
       <inertial>
         <pose>0 0 -0.05 0 0 0</pose>
         <mass>35.0</mass>
@@ -20,7 +21,7 @@
       </inertial>
 
       <visual name="assembly_visual">
-        <pose>-1.144 0 -0.638 0 0 0</pose>
+        <pose>-1.144 0 -0.42 0 0 0</pose>
         <geometry>
           <mesh>
             <uri>model://gamantaray_boat/meshes/assembly_2_0.obj</uri>
@@ -30,10 +31,10 @@
       </visual>
 
       <collision name="main_hull_collision">
-        <pose>0 0 -0.05 0 0 0</pose>
+        <pose>0 0 0.1 0 0 0</pose>
         <geometry>
           <box>
-            <size>2.4 1.35 0.45</size>
+            <size>1.175 0.82 0.45</size>
           </box>
         </geometry>
         <surface>
@@ -43,38 +44,12 @@
         </surface>
       </collision>
 
-      <visual name="left_thruster_visual">
-        <pose>-0.85 0.45 -0.2 0 1.5708 0</pose>
-        <geometry>
-          <cylinder>
-            <radius>0.08</radius>
-            <length>0.25</length>
-          </cylinder>
-        </geometry>
-        <material>
-          <diffuse>0.02 0.02 0.02 1</diffuse>
-        </material>
-      </visual>
-
-      <visual name="right_thruster_visual">
-        <pose>-0.85 -0.45 -0.2 0 1.5708 0</pose>
-        <geometry>
-          <cylinder>
-            <radius>0.08</radius>
-            <length>0.25</length>
-          </cylinder>
-        </geometry>
-        <material>
-          <diffuse>0.02 0.02 0.02 1</diffuse>
-        </material>
-      </visual>
-
       <visual name="lidar_mast_visual">
-        <pose>0.15 0 0.85 0 0 0</pose>
+        <pose>0.52 0 0.3 0 0 0</pose>
         <geometry>
           <cylinder>
             <radius>0.025</radius>
-            <length>1.15</length>
+            <length>0.70</length>
           </cylinder>
         </geometry>
         <material>
@@ -83,10 +58,10 @@
       </visual>
 
       <visual name="sensor_crossbar_visual">
-        <pose>0.15 0 1.43 0 0 0</pose>
+        <pose>0.52 0 0.65 0 0 0</pose>
         <geometry>
           <box>
-            <size>0.16 0.55 0.05</size>
+            <size>0.16 0.40 0.05</size>
           </box>
         </geometry>
         <material>
@@ -101,7 +76,7 @@
       </sensor>
 
       <sensor name="gps_sensor" type="navsat">
-        <pose>0.15 0 1.45 0 0 0</pose>
+        <pose>0.52 0 0.66 0 0 0</pose>
         <topic>/asv/gps/fix</topic>
         <always_on>true</always_on>
         <update_rate>10</update_rate>
@@ -124,7 +99,7 @@
       </sensor>
 
       <sensor name="lidar_sensor" type="gpu_lidar">
-        <pose>0.35 0 1.42 0 0 0</pose>
+        <pose>0.55 0 0.64 0 0 0</pose>
         <topic>/asv/lidar/scan</topic>
         <always_on>true</always_on>
         <visualize>true</visualize>
@@ -158,16 +133,16 @@
       </sensor>
 
       <sensor name="front_camera_sensor" type="camera">
-        <pose>0.85 0 1.25 0 0.10 0</pose>
+        <pose>0.55 0 0.55 0 0.10 0</pose>
         <topic>/asv/camera/front/image</topic>
         <always_on>true</always_on>
-        <update_rate>20</update_rate>
+        <update_rate>10</update_rate>
         <visualize>true</visualize>
         <camera>
           <horizontal_fov>1.3962634</horizontal_fov>
           <image>
-            <width>1280</width>
-            <height>720</height>
+            <width>640</width>
+            <height>360</height>
             <format>R8G8B8</format>
           </image>
           <clip>
@@ -215,8 +190,9 @@
         </inertia>
       </inertial>
     </link>
+    
     <joint name="left_propeller_joint" type="revolute">
-      <pose relative_to="base_link">-0.95 0.45 -0.05 0 0 0</pose>
+      <pose relative_to="base_link">-0.80 0.41 -0.42 0 0 0</pose>
       <parent>base_link</parent>
       <child>left_propeller_link</child>
       <axis>
@@ -271,8 +247,9 @@
         </inertia>
       </inertial>
     </link>
+    
     <joint name="right_propeller_joint" type="revolute">
-      <pose relative_to="base_link">-0.95 -0.45 -0.05 0 0 0</pose>
+      <pose relative_to="base_link">-0.80 -0.41 -0.42 0 0 0</pose>
       <parent>base_link</parent>
       <child>right_propeller_link</child>
       <axis>

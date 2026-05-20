@@ -105,6 +105,14 @@
         <update_rate>100</update_rate>
       </sensor>
 
+      <!-- ArduPilotPlugin subscribes to the Gazebo-scoped default IMU topic.
+           Keep the /asv/imu/data sensor above for ROS, and use this one only
+           for the ArduPilot JSON sensor feedback loop. -->
+      <sensor name="ardupilot_imu_sensor" type="imu">
+        <always_on>true</always_on>
+        <update_rate>100</update_rate>
+      </sensor>
+
       <sensor name="gps_sensor" type="navsat">
         <pose>0.52 0 1.00 0 0 0</pose>
         <topic>/asv/gps/fix</topic>
@@ -129,7 +137,10 @@
       </sensor>
 
       <sensor name="lidar_sensor" type="gpu_lidar">
-        <pose>0.55 0 0.95 0 0 0</pose>
+        <!-- The GPU LiDAR ray is kept low enough to intersect the visual
+             body/flag pole of 0.5 m TEKNOFEST buoys, while placed forward of
+             the hull collision to avoid reading the boat itself. -->
+        <pose>0.95 0 0.32 0 0 0</pose>
         <topic>/asv/lidar/scan_raw</topic>
         <always_on>true</always_on>
         <visualize>true</visualize>
@@ -151,7 +162,7 @@
           </scan>
           <range>
             <min>0.45</min>
-            <max>35.0</max>
+            <max>10.0</max>
             <resolution>0.02</resolution>
           </range>
           <noise>
@@ -326,8 +337,8 @@
       <propeller_diameter>0.15</propeller_diameter>
       <velocity_control>true</velocity_control>
       <use_angvel_cmd>false</use_angvel_cmd>
-      <max_thrust_cmd>120</max_thrust_cmd>
-      <min_thrust_cmd>-70</min_thrust_cmd>
+      <max_thrust_cmd>160</max_thrust_cmd>
+      <min_thrust_cmd>-90</min_thrust_cmd>
     </plugin>
     <plugin filename="gz-sim-thruster-system"
             name="gz::sim::systems::Thruster">
@@ -337,40 +348,42 @@
       <propeller_diameter>0.15</propeller_diameter>
       <velocity_control>true</velocity_control>
       <use_angvel_cmd>false</use_angvel_cmd>
-      <max_thrust_cmd>120</max_thrust_cmd>
-      <min_thrust_cmd>-70</min_thrust_cmd>
+      <max_thrust_cmd>160</max_thrust_cmd>
+      <min_thrust_cmd>-90</min_thrust_cmd>
     </plugin>
 
     <plugin name="ArduPilotPlugin" filename="ArduPilotPlugin">
       <fdm_addr>127.0.0.1</fdm_addr>
       <fdm_port_in>9002</fdm_port_in>
-      <connectionTimeoutMaxCount>5</connectionTimeoutMaxCount>
-      <lock_step>0</lock_step>
+      <connectionTimeoutMaxCount>50</connectionTimeoutMaxCount>
+      <lock_step>1</lock_step>
+      <no_time_sync>1</no_time_sync>
       <modelXYZToAirplaneXForwardZDown>0 0 0 3.141593 0 0</modelXYZToAirplaneXForwardZDown>
-      <gazeboXYZToNED>0 0 0 3.141593 0 1.57079632</gazeboXYZToNED>
-      <imuName>imu_sensor</imuName>
+      <gazeboXYZToNED>0 0 0 3.141593 0 0</gazeboXYZToNED>
+      <imuName>ardupilot_imu_sensor</imuName>
 
-      <!-- ArduRover skid-steer mapping:
-           SERVO1_FUNCTION=73 -> left throttle, SERVO3_FUNCTION=74 -> right throttle. -->
+      <!-- ArduRover skid-steer mapping. The physical propeller joints use
+           opposite signs, so the channels are crossed here to make ArduPilot's
+           steering correction match Gazebo yaw direction. -->
       <control channel="0">
-        <jointName>left_propeller_joint</jointName>
-        <useForce>1</useForce>
-        <multiplier>90</multiplier>
-        <offset>-0.5</offset>
-        <servo_min>1000</servo_min>
-        <servo_max>2000</servo_max>
-        <type>COMMAND</type>
-        <cmd_topic>/model/gamantaray_boat/joint/left_propeller_joint/cmd_thrust</cmd_topic>
-      </control>
-      <control channel="2">
         <jointName>right_propeller_joint</jointName>
         <useForce>1</useForce>
-        <multiplier>90</multiplier>
+        <multiplier>16000</multiplier>
         <offset>-0.5</offset>
         <servo_min>1000</servo_min>
         <servo_max>2000</servo_max>
         <type>COMMAND</type>
         <cmd_topic>/model/gamantaray_boat/joint/right_propeller_joint/cmd_thrust</cmd_topic>
+      </control>
+      <control channel="2">
+        <jointName>left_propeller_joint</jointName>
+        <useForce>1</useForce>
+        <multiplier>-16000</multiplier>
+        <offset>-0.5</offset>
+        <servo_min>1000</servo_min>
+        <servo_max>2000</servo_max>
+        <type>COMMAND</type>
+        <cmd_topic>/model/gamantaray_boat/joint/left_propeller_joint/cmd_thrust</cmd_topic>
       </control>
     </plugin>
   </model>

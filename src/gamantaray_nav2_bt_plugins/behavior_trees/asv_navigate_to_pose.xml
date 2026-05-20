@@ -1,16 +1,16 @@
 <!--
   ASV navigation tree:
-  - Replans at 1 Hz for waypoint tracking.
+  - Replans at 0.7 Hz to reduce planner churn during fast waypoint tracking.
   - Uses the custom ASV scan guard to clear short-lived wave clutter before
     control, while leaving normal buoy obstacles in the local costmap for DWB.
 -->
 <root BTCPP_format="4" main_tree_to_execute="MainTree">
   <BehaviorTree ID="MainTree">
-    <RecoveryNode number_of_retries="6" name="NavigateRecovery">
+    <RecoveryNode number_of_retries="3" name="NavigateRecovery">
       <PipelineSequence name="NavigateWithReplanning">
         <ControllerSelector selected_controller="{selected_controller}" default_controller="FollowPath" topic_name="controller_selector"/>
         <PlannerSelector selected_planner="{selected_planner}" default_planner="GridBased" topic_name="planner_selector"/>
-        <RateController hz="1.0">
+        <RateController hz="0.7">
           <RecoveryNode number_of_retries="1" name="ComputePathToPose">
             <ComputePathToPose goal="{goal}" path="{path}" planner_id="{selected_planner}" error_code_id="{compute_path_error_code}"/>
             <Sequence>
@@ -20,10 +20,10 @@
           </RecoveryNode>
         </RateController>
         <ReactiveFallback name="ASVLocalScanGuard">
-          <AsvObstacleWindow scan_topic="/asv/lidar/scan" max_scan_age="0.9" min_range="0.75" forward_distance="5.0" half_width="1.5" max_points_in_window="120"/>
+          <AsvObstacleWindow scan_topic="/asv/lidar/scan" max_scan_age="0.9" min_range="0.75" forward_distance="4.0" half_width="1.2" max_points_in_window="220"/>
           <Sequence name="ClearNoisyLocalCostmap">
             <ClearEntireCostmap name="ClearLocalCostmap-ASVGuard" service_name="local_costmap/clear_entirely_local_costmap"/>
-            <Wait wait_duration="0.4"/>
+            <Wait wait_duration="0.1"/>
           </Sequence>
         </ReactiveFallback>
         <RecoveryNode number_of_retries="1" name="FollowPath">
@@ -46,8 +46,8 @@
               <ClearEntireCostmap name="ClearLocalCostmap-Subtree" service_name="local_costmap/clear_entirely_local_costmap"/>
               <ClearEntireCostmap name="ClearGlobalCostmap-Subtree" service_name="global_costmap/clear_entirely_global_costmap"/>
             </Sequence>
-            <Wait wait_duration="1.0"/>
-            <BackUp backup_dist="0.25" backup_speed="0.12" error_code_id="{backup_code_id}"/>
+            <Wait wait_duration="0.3"/>
+            <BackUp backup_dist="0.20" backup_speed="0.20" error_code_id="{backup_code_id}"/>
           </RoundRobin>
         </ReactiveFallback>
       </Sequence>

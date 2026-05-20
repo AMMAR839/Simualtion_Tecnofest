@@ -20,6 +20,12 @@ class LidarScanFilter(Node):
         self.min_valid_range = float(
             self.declare_parameter("min_valid_range", 0.75).value
         )
+        self.drop_max_range_returns = bool(
+            self.declare_parameter("drop_max_range_returns", True).value
+        )
+        self.max_range_return_margin_m = float(
+            self.declare_parameter("max_range_return_margin_m", 0.35).value
+        )
         self.fallback_frame_id = self.declare_parameter(
             "fallback_frame_id", "lidar_link"
         ).value
@@ -54,20 +60,21 @@ class LidarScanFilter(Node):
             self.declare_parameter("keep_angle_max", math.pi).value
         )
         self.cluster_gap_m = float(
-            self.declare_parameter("cluster_gap_m", 0.35).value
+            self.declare_parameter("cluster_gap_m", 0.45).value
         )
         self.min_cluster_points = int(
-            self.declare_parameter("min_cluster_points", 3).value
+            self.declare_parameter("min_cluster_points", 1).value
         )
         self.min_cluster_width_m = float(
-            self.declare_parameter("min_cluster_width_m", 0.10).value
+            self.declare_parameter("min_cluster_width_m", 0.0).value
         )
         self.max_cluster_width_m = float(
-            self.declare_parameter("max_cluster_width_m", 1.25).value
+            self.declare_parameter("max_cluster_width_m", 1.40).value
         )
         self.max_cluster_points = int(
-            self.declare_parameter("max_cluster_points", 80).value
+            self.declare_parameter("max_cluster_points", 100).value
         )
+        self.max_scan_range = math.inf
 
         scan_qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
         self.publisher = self.create_publisher(LaserScan, self.filtered_topic, scan_qos)
@@ -91,6 +98,7 @@ class LidarScanFilter(Node):
         filtered.range_min = max(scan.range_min, self.min_valid_range)
         filtered.range_max = scan.range_max
         filtered.intensities = list(scan.intensities)
+        self.max_scan_range = scan.range_max
 
         ranges = []
         angle = scan.angle_min
@@ -108,6 +116,8 @@ class LidarScanFilter(Node):
             return math.inf
         if distance < range_min:
             return math.inf
+        if self.is_max_range_return(distance):
+            return math.inf
 
         x = distance * math.cos(angle) + self.sensor_x
         y = distance * math.sin(angle) + self.sensor_y
@@ -118,6 +128,12 @@ class LidarScanFilter(Node):
         if inside_boat_footprint:
             return math.inf
         return distance
+
+    def is_max_range_return(self, distance):
+        if not self.drop_max_range_returns:
+            return False
+        max_return = max(self.min_valid_range, self.max_scan_range - self.max_range_return_margin_m)
+        return distance >= max_return
 
     def angle_is_kept(self, angle):
         if self.keep_angle_min <= self.keep_angle_max:

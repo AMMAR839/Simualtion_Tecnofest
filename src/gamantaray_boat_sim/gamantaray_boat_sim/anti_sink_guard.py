@@ -1,12 +1,11 @@
 import math
+import subprocess
 
 import rclpy
 from geometry_msgs.msg import Quaternion
 from nav_msgs.msg import Odometry
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
-from ros_gz_interfaces.msg import Entity
-from ros_gz_interfaces.srv import SetEntityPose
 
 
 class AntiSinkGuard(Node):
@@ -32,9 +31,11 @@ class AntiSinkGuard(Node):
         self.min_call_period_s = float(
             self.declare_parameter("min_call_period_s", 0.50).value
         )
+        self.service_timeout_s = float(
+            self.declare_parameter("service_timeout_s", 1.0).value
+        )
         self.last_call_time = None
 
-        self.client = self.create_client(SetEntityPose, self.service_name)
         self.create_subscription(Odometry, self.odom_topic, self.on_odom, 20)
 
     def on_odom(self, msg):
@@ -55,34 +56,61 @@ class AntiSinkGuard(Node):
             return
         if not self.can_call_now():
             return
-        if not self.client.service_is_ready():
-            self.client.wait_for_service(timeout_sec=0.01)
-            return
 
-        req = SetEntityPose.Request()
-        req.entity.name = self.entity_name
-        req.entity.type = Entity.MODEL
         if bad_position:
-            req.pose.position.x = self.safe_x
-            req.pose.position.y = self.safe_y
-            req.pose.position.z = self.restore_z
-            req.pose.orientation = self.quaternion_from_rpy(0.0, 0.0, self.safe_yaw)
+            x = self.safe_x
+            y = self.safe_y
+            z = self.restore_z
+            orientation = self.quaternion_from_rpy(0.0, 0.0, self.safe_yaw)
         else:
-            req.pose.position.x = pose.position.x
-            req.pose.position.y = pose.position.y
-            req.pose.position.z = self.restore_z if pose.position.z < self.min_z else pose.position.z
+            x = pose.position.x
+            y = pose.position.y
+            z = self.restore_z if pose.position.z < self.min_z else pose.position.z
             if needs_attitude_reset:
-                req.pose.orientation = self.quaternion_from_rpy(0.0, 0.0, yaw)
+                orientation = self.quaternion_from_rpy(0.0, 0.0, yaw)
             else:
-                req.pose.orientation = pose.orientation
+                orientation = pose.orientation
 
         self.last_call_time = self.get_clock().now()
-        self.client.call_async(req)
+        self.call_gz_set_pose(x, y, z, orientation)
         self.get_logger().warn(
             f"Restoring {self.entity_name}: x={pose.position.x:.2f}, "
             f"y={pose.position.y:.2f}, z={pose.position.z:.2f}, "
             f"roll={roll:.2f}, pitch={pitch:.2f}, bad_position={bad_position}"
         )
+
+    def call_gz_set_pose(self, x, y, z, orientation):
+        request = (
+            f'name: "{self.entity_name}" '
+            f"position {{ x: {x:.6f} y: {y:.6f} z: {z:.6f} }} "
+            "orientation { "
+            f"x: {orientation.x:.8f} y: {orientation.y:.8f} "
+            f"z: {orientation.z:.8f} w: {orientation.w:.8f} "
+            "}"
+        )
+        try:
+            subprocess.run(
+                [
+                    "gz",
+                    "service",
+                    "-s",
+                    self.service_name,
+                    "--reqtype",
+                    "gz.msgs.Pose",
+                    "--reptype",
+                    "gz.msgs.Boolean",
+                    "--timeout",
+                    str(max(1, int(self.service_timeout_s * 1000.0))),
+                    "--req",
+                    request,
+                ],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=self.service_timeout_s + 0.5,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            self.get_logger().warn(f"Gazebo restore service failed: {exc}")
 
     def can_call_now(self):
         if self.last_call_time is None:

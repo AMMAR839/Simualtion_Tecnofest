@@ -38,7 +38,10 @@ class Nav2WaypointMission(Node):
         self.declare_parameter("use_through_poses", False)
         self.declare_parameter("prereq_timeout_s", 90.0)
         self.declare_parameter("waypoint_acceptance_radius_m", 1.80)
+        self.declare_parameter("waypoint_passed_margin_m", 2.00)
+        self.declare_parameter("waypoint_passed_cross_track_m", 6.50)
         self.declare_parameter("waypoint_check_period_s", 0.20)
+        self.declare_parameter("waypoint_advance_pause_s", 0.15)
         self.declare_parameter("status_period_s", 1.0)
         self.declare_parameter("max_goal_retries", 3)
         self.status_pub = self.create_publisher(String, "/asv/navigation/status", 10)
@@ -96,14 +99,10 @@ class Nav2WaypointMission(Node):
             data = yaml.safe_load(handle)
 
         frame_id = str(data.get("frame_id", self.get_parameter("frame_id").value))
+        start_pose = self.pose_from_item(data.get("startpoint", {}), frame_id)
         waypoints = []
         for item in data.get("waypoints", []):
-            pose = PoseStamped()
-            pose.header.frame_id = frame_id
-            pose.pose.position.x = float(item["x"])
-            pose.pose.position.y = float(item["y"])
-            pose.pose.position.z = 0.0
-            pose.pose.orientation.w = 1.0
+            pose = self.pose_from_item(item, frame_id)
             waypoints.append((str(item.get("name", f"wp{len(waypoints) + 1}")), pose))
 
         self.apply_segment_orientations(waypoints)
@@ -131,10 +130,14 @@ class Nav2WaypointMission(Node):
             check_period_s = max(
                 0.05, float(self.get_parameter("waypoint_check_period_s").value)
             )
+            advance_pause_s = max(
+                0.0, float(self.get_parameter("waypoint_advance_pause_s").value)
+            )
             status_period_s = max(
                 check_period_s, float(self.get_parameter("status_period_s").value)
             )
             for index, (name, pose) in enumerate(waypoints, start=1):
+                previous_pose = start_pose if index == 1 else waypoints[index - 2][1]
                 waypoint_reached = False
                 for attempt in range(1, max_retries + 2):
                     pose.header.stamp = navigator.get_clock().now().to_msg()
@@ -142,6 +145,7 @@ class Nav2WaypointMission(Node):
                     self.publish_status(f"nav2_waypoint_goal:{index}:{name}{suffix}")
                     navigator.goToPose(pose)
                     reached_by_radius = False
+                    reached_by_passed = False
                     last_running_status = 0.0
                     while rclpy.ok():
                         rclpy.spin_once(self, timeout_sec=0.0)
@@ -149,6 +153,10 @@ class Nav2WaypointMission(Node):
                             self.get_parameter("waypoint_acceptance_radius_m").value
                         ):
                             reached_by_radius = True
+                            self.cancel_current_task(navigator)
+                            break
+                        if self.has_passed_waypoint(previous_pose, pose):
+                            reached_by_passed = True
                             self.cancel_current_task(navigator)
                             break
                         if navigator.isTaskComplete():
@@ -163,9 +171,12 @@ class Nav2WaypointMission(Node):
                     if not rclpy.ok():
                         return
 
-                    if reached_by_radius:
+                    if reached_by_radius or reached_by_passed:
+                        if reached_by_passed:
+                            self.publish_status(f"nav2_waypoint_passed:{index}:{name}")
                         self.publish_status(f"nav2_waypoint_reached:{index}:{name}")
-                        time.sleep(0.5)
+                        if advance_pause_s > 0.0:
+                            time.sleep(advance_pause_s)
                         waypoint_reached = True
                         break
 
@@ -249,6 +260,27 @@ class Nav2WaypointMission(Node):
         dy = float(pose.pose.position.y) - self.last_odom_xy[1]
         return math.hypot(dx, dy)
 
+    def has_passed_waypoint(self, previous_pose, target_pose):
+        if self.last_odom_xy is None or previous_pose is None:
+            return False
+        margin_m = float(self.get_parameter("waypoint_passed_margin_m").value)
+        max_cross_track_m = float(
+            self.get_parameter("waypoint_passed_cross_track_m").value
+        )
+        return self.segment_passed(
+            (
+                float(previous_pose.pose.position.x),
+                float(previous_pose.pose.position.y),
+            ),
+            (
+                float(target_pose.pose.position.x),
+                float(target_pose.pose.position.y),
+            ),
+            self.last_odom_xy,
+            margin_m,
+            max_cross_track_m,
+        )
+
     @staticmethod
     def cancel_current_task(navigator):
         navigator.cancelTask()
@@ -257,6 +289,34 @@ class Nav2WaypointMission(Node):
             if time.monotonic() - start > 2.0:
                 break
             time.sleep(0.1)
+
+    @staticmethod
+    def pose_from_item(item, frame_id):
+        if "x" not in item or "y" not in item:
+            return None
+        pose = PoseStamped()
+        pose.header.frame_id = frame_id
+        pose.pose.position.x = float(item["x"])
+        pose.pose.position.y = float(item["y"])
+        pose.pose.position.z = 0.0
+        pose.pose.orientation.w = 1.0
+        return pose
+
+    @staticmethod
+    def segment_passed(start_xy, target_xy, current_xy, margin_m, max_cross_track_m):
+        sx, sy = start_xy
+        tx, ty = target_xy
+        cx, cy = current_xy
+        vx = tx - sx
+        vy = ty - sy
+        wx = cx - sx
+        wy = cy - sy
+        seg_len = math.hypot(vx, vy)
+        if seg_len < 1.0e-6:
+            return False
+        along = (wx * vx + wy * vy) / seg_len
+        cross = abs(wx * vy - wy * vx) / seg_len
+        return along >= seg_len + margin_m and cross <= max_cross_track_m
 
     def apply_segment_orientations(self, waypoints):
         for index, (_, pose) in enumerate(waypoints):

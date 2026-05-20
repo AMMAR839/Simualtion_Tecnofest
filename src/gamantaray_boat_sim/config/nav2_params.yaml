@@ -18,7 +18,7 @@ bt_navigator:
 controller_server:
   ros__parameters:
     use_sim_time: true
-    controller_frequency: 8.0
+    controller_frequency: 12.0
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.5
     min_theta_velocity_threshold: 0.001
@@ -33,7 +33,7 @@ controller_server:
     general_goal_checker:
       stateful: true
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 1.40
+      xy_goal_tolerance: 2.60
       yaw_goal_tolerance: 3.14
     FollowPath:
       plugin: "dwb_core::DWBLocalPlanner"
@@ -41,60 +41,78 @@ controller_server:
       transform_tolerance: 1.0
       min_vel_x: 0.0
       min_vel_y: 0.0
-      max_vel_x: 0.36
+      max_vel_x: 0.88
       max_vel_y: 0.0
-      max_vel_theta: 1.25
+      max_vel_theta: 1.95
       min_speed_xy: 0.03
-      max_speed_xy: 0.36
+      max_speed_xy: 0.88
       min_speed_theta: 0.0
-      acc_lim_x: 0.16
+      acc_lim_x: 0.48
       acc_lim_y: 0.0
-      acc_lim_theta: 1.65
-      decel_lim_x: -0.24
+      acc_lim_theta: 3.00
+      decel_lim_x: -0.60
       decel_lim_y: 0.0
-      decel_lim_theta: -1.50
-      vx_samples: 7
+      decel_lim_theta: -2.80
+      vx_samples: 10
       vy_samples: 1
-      vtheta_samples: 40
-      sim_time: 3.1
+      vtheta_samples: 52
+      sim_time: 1.65
       linear_granularity: 0.12
       angular_granularity: 0.05
-      xy_goal_tolerance: 1.40
+      xy_goal_tolerance: 2.60
       trans_stopped_velocity: 0.05
       short_circuit_trajectory_evaluation: true
       stateful: true
-      critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
-      BaseObstacle.scale: 0.12
-      PathAlign.scale: 5.0
-      PathAlign.forward_point_distance: 1.40
-      GoalAlign.scale: 4.0
-      GoalAlign.forward_point_distance: 1.40
-      PathDist.scale: 4.0
-      GoalDist.scale: 6.0
-      RotateToGoal.scale: 0.7
-      RotateToGoal.slowing_factor: 5.0
-      RotateToGoal.lookahead_time: -1.0
+      critics: ["Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
+      BaseObstacle.scale: 1.30
+      PathAlign.scale: 0.55
+      PathAlign.forward_point_distance: 1.70
+      GoalAlign.scale: 0.45
+      GoalAlign.forward_point_distance: 1.70
+      PathDist.scale: 0.75
+      GoalDist.scale: 3.60
 
 local_costmap:
   local_costmap:
     ros__parameters:
       use_sim_time: true
-      update_frequency: 4.0
-      publish_frequency: 2.0
+      update_frequency: 5.0
+      publish_frequency: 3.0
       global_frame: odom
       robot_base_frame: base_link
       transform_tolerance: 1.0
       rolling_window: true
-      width: 12
-      height: 10
+      width: 20
+      height: 20
       resolution: 0.10
       footprint: "[[0.85, 0.48], [0.85, -0.48], [-1.05, -0.48], [-1.05, 0.48]]"
       footprint_padding: 0.10
-      plugins: ["stvl_layer", "inflation_layer"]
+      plugins: ["obstacle_layer", "stvl_layer", "inflation_layer"]
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: true
+        observation_sources: scan
+        footprint_clearing_enabled: true
+        combination_method: 1
+        scan:
+          topic: /asv/lidar/scan
+          sensor_frame: lidar_link
+          sensor_data_qos: true
+          max_obstacle_height: 2.0
+          clearing: true
+          marking: true
+          data_type: "LaserScan"
+          expected_update_rate: 0.6
+          observation_persistence: 0.35
+          inf_is_valid: true
+          raytrace_max_range: 10.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 9.4
+          obstacle_min_range: 0.75
       stvl_layer:
         plugin: "spatio_temporal_voxel_layer/SpatioTemporalVoxelLayer"
         enabled: true
-        voxel_decay: 3.0
+        voxel_decay: 2.5
         decay_model: 0
         voxel_size: 0.12
         track_unknown_space: false
@@ -113,25 +131,25 @@ local_costmap:
           topic: /asv/lidar/points_filtered
           clearing: true
           marking: true
-          obstacle_range: 8.5
-          min_obstacle_height: 0.0
+          obstacle_range: 9.4
+          min_obstacle_height: -0.2
           max_obstacle_height: 2.0
-          expected_update_rate: 0.4
+          expected_update_rate: 0.6
           observation_persistence: 0.0
           inf_is_valid: false
           filter: "voxel"
-          voxel_min_points: 2
+          voxel_min_points: 1
           clear_after_reading: true
           max_z: 2.0
-          min_z: 0.0
+          min_z: -0.2
           vertical_fov_angle: 0.20
           horizontal_fov_angle: 6.283185
           decay_acceleration: 3.0
           model_type: 0
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 6.0
-        inflation_radius: 0.65
+        cost_scaling_factor: 4.0
+        inflation_radius: 0.85
       always_send_full_costmap: true
 
 global_costmap:
@@ -242,10 +260,10 @@ velocity_smoother:
     smoothing_frequency: 10.0
     scale_velocities: false
     feedback: "OPEN_LOOP"
-    max_velocity: [0.36, 0.0, 1.15]
-    min_velocity: [-0.06, 0.0, -1.15]
-    max_accel: [0.16, 0.0, 1.45]
-    max_decel: [-0.24, 0.0, -1.45]
+    max_velocity: [0.88, 0.0, 1.90]
+    min_velocity: [-0.08, 0.0, -1.90]
+    max_accel: [0.48, 0.0, 2.80]
+    max_decel: [-0.60, 0.0, -2.80]
     odom_topic: /asv/odom
     odom_duration: 0.2
     deadband_velocity: [0.02, 0.0, 0.02]
@@ -268,7 +286,7 @@ collision_monitor:
       type: "polygon"
       action_type: "approach"
       footprint_topic: "/local_costmap/published_footprint"
-      time_before_collision: 0.7
+      time_before_collision: 0.45
       simulation_time_step: 0.1
       min_points: 8
       visualize: true

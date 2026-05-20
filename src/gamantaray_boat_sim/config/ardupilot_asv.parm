@@ -14,21 +14,34 @@ SERVO3_MIN 1000
 SERVO3_TRIM 1500
 SERVO3_MAX 2000
 
-# Conservative first-run speed so obstacle avoidance has enough time to react
-# in the narrow TEKNOFEST course.
-CRUISE_SPEED 1.0
-CRUISE_THROTTLE 45
-WP_SPEED 1.0
-WP_RADIUS 1.5
-WP_OVERSHOOT 1.0
-ATC_STR_RAT_FF 0.2
+# Keep SITL bring-up deterministic in Gazebo. Real hardware must not copy
+# these safety relaxations without a separate safety review.
+ARMING_CHECK 0
+BRD_SAFETYENABLE 0
+
+# Faster ASV defaults for the 100 x 20 m TEKNOFEST course. Keep the radius
+# wider than a land robot so the boat does not turn back after overshooting a
+# waypoint by a few meters.
+CRUISE_SPEED 3.0
+CRUISE_THROTTLE 78
+WP_SPEED 3.0
+WP_RADIUS 7.0
+WP_OVERSHOOT 6.0
+ATC_STR_RAT_FF 0.35
+ATC_STR_RAT_P 0.25
+ATC_STR_RAT_I 0.12
+ATC_STR_RAT_MAX 180
+ATC_TURN_MAX_G 0.9
+TURN_RADIUS 0.6
+WP_PIVOT_ANGLE 45
+WP_PIVOT_RATE 100
 PILOT_STEER_TYPE 0
 
 # MAVLink proximity input from /asv/lidar/scan via MAVROS.
 # ArduPilot docs use PRX1_TYPE=2 for MAVLink proximity data.
 PRX1_TYPE 2
 PRX1_MIN 0.8
-PRX1_MAX 18.0
+PRX1_MAX 10.0
 PRX1_ORIENT 0
 AVOID_ENABLE 7
 AVOID_MARGIN 1.5

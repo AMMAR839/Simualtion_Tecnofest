@@ -1,5 +1,6 @@
 import math
 
+from builtin_interfaces.msg import Time as TimeMsg
 import rclpy
 from nav_msgs.msg import Odometry
 from rclpy.executors import ExternalShutdownException
@@ -36,11 +37,15 @@ class RvizBoatMarker(Node):
         self.publish_in_fixed_frame = self.declare_parameter(
             "publish_in_fixed_frame", True
         ).value
+        self.frame_locked = bool(self.declare_parameter("frame_locked", True).value)
+        self.publish_period_s = float(
+            self.declare_parameter("publish_period_s", 0.20).value
+        )
         self.latest_odom_pose = None
         self.latest_odom_stamp = None
         qos = QoSProfile(
             depth=1,
-            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            durability=DurabilityPolicy.VOLATILE,
             reliability=ReliabilityPolicy.RELIABLE,
         )
         self.publisher = self.create_publisher(
@@ -48,7 +53,7 @@ class RvizBoatMarker(Node):
         )
         odom_qos = QoSProfile(depth=20, reliability=ReliabilityPolicy.BEST_EFFORT)
         self.create_subscription(Odometry, self.odom_topic, self.on_odom, odom_qos)
-        self.timer = self.create_timer(0.5, self.publish_boat_model)
+        self.timer = self.create_timer(max(0.05, self.publish_period_s), self.publish_boat_model)
 
     def on_odom(self, msg):
         self.latest_odom_pose = msg.pose.pose
@@ -57,7 +62,7 @@ class RvizBoatMarker(Node):
     def publish_boat_model(self):
         if self.publish_in_fixed_frame and self.latest_odom_pose is None:
             return
-        stamp = self.latest_odom_stamp if self.publish_in_fixed_frame else self.get_clock().now().to_msg()
+        stamp = self.latest_odom_stamp if self.publish_in_fixed_frame else TimeMsg()
         markers = []
         if self.use_heavy_mesh:
             markers.append(self.mesh_marker(0, stamp))
@@ -79,6 +84,7 @@ class RvizBoatMarker(Node):
         marker.type = marker_type
         marker.action = Marker.ADD
         marker.pose.orientation.w = 1.0
+        marker.frame_locked = self.frame_locked
         marker.lifetime.sec = 0
         return marker
 

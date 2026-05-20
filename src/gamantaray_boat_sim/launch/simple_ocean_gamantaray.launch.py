@@ -62,10 +62,13 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration("use_sim_time")
     use_nav2 = LaunchConfiguration("use_nav2")
     use_rviz = LaunchConfiguration("use_rviz")
+    use_gazebo_gui = LaunchConfiguration("use_gazebo_gui")
     show_lidar_rays = LaunchConfiguration("show_lidar_rays")
     navigation_mode = LaunchConfiguration("navigation_mode")
     world = LaunchConfiguration("world")
     waypoint_file = LaunchConfiguration("waypoint_file")
+    ardupilot_nav_file = LaunchConfiguration("ardupilot_nav_file")
+    ardupilot_no_terminal = LaunchConfiguration("ardupilot_no_terminal")
     target_color = LaunchConfiguration("target_color")
 
     pkg_share = FindPackageShare("gamantaray_boat_sim")
@@ -78,6 +81,9 @@ def generate_launch_description():
     )
     nav2_params = PathJoinSubstitution([pkg_share, "config", "nav2_params.yaml"])
     ardupilot_params = PathJoinSubstitution([pkg_share, "config", "ardupilot_asv.parm"])
+    default_ardupilot_nav = PathJoinSubstitution(
+        [pkg_share, "config", "ardupilot_nav.yaml"]
+    )
     rviz_config = PathJoinSubstitution([pkg_share, "config", "tecnofest_nav2.rviz"])
     gazebo_gui_config = PathJoinSubstitution(
         [pkg_share, "config", "tecnofest_gazebo_gui.config"]
@@ -101,11 +107,21 @@ def generate_launch_description():
     ardupilot_condition = IfCondition(
         PythonExpression(["'", navigation_mode, "' == 'ardupilot'"])
     )
+    ardupilot_terminal_condition = IfCondition(
+        PythonExpression(
+            ["'", navigation_mode, "' == 'ardupilot' and '", ardupilot_no_terminal, "' != 'true'"]
+        )
+    )
+    ardupilot_no_terminal_condition = IfCondition(
+        PythonExpression(
+            ["'", navigation_mode, "' == 'ardupilot' and '", ardupilot_no_terminal, "' == 'true'"]
+        )
+    )
     non_ardupilot_condition = IfCondition(
         PythonExpression(["'", navigation_mode, "' != 'ardupilot'"])
     )
 
-    gazebo = ExecuteProcess(
+    gazebo_gui = ExecuteProcess(
         cmd=[
             "gz",
             "sim",
@@ -118,6 +134,22 @@ def generate_launch_description():
         ],
         output="screen",
         name="gazebo",
+        condition=IfCondition(use_gazebo_gui),
+    )
+
+    gazebo_server = ExecuteProcess(
+        cmd=[
+            "gz",
+            "sim",
+            "-s",
+            "-r",
+            "-v",
+            "3",
+            world,
+        ],
+        output="screen",
+        name="gazebo_server",
+        condition=IfCondition(PythonExpression(["'", use_gazebo_gui, "' != 'true'"])),
     )
 
     return LaunchDescription(
@@ -125,11 +157,14 @@ def generate_launch_description():
             DeclareLaunchArgument("use_sim_time", default_value="true"),
             DeclareLaunchArgument("use_nav2", default_value="true"),
             DeclareLaunchArgument("use_rviz", default_value="true"),
+            DeclareLaunchArgument("use_gazebo_gui", default_value="true"),
             DeclareLaunchArgument("show_lidar_rays", default_value="false"),
             DeclareLaunchArgument("navigation_mode", default_value="nav2"),
             DeclareLaunchArgument("target_color", default_value="green"),
             DeclareLaunchArgument("world", default_value=default_world),
             DeclareLaunchArgument("waypoint_file", default_value=default_waypoints),
+            DeclareLaunchArgument("ardupilot_nav_file", default_value=default_ardupilot_nav),
+            DeclareLaunchArgument("ardupilot_no_terminal", default_value="false"),
             SetEnvironmentVariable(
                 name="GZ_SIM_RESOURCE_PATH",
                 value=joined_path(resource_paths),
@@ -148,10 +183,23 @@ def generate_launch_description():
                     plugin_paths + [EnvironmentVariable("LD_LIBRARY_PATH", default_value="")]
                 ),
             ),
-            gazebo,
+            gazebo_gui,
+            gazebo_server,
             RegisterEventHandler(
                 OnProcessExit(
-                    target_action=gazebo,
+                    target_action=gazebo_gui,
+                    on_exit=[
+                        EmitEvent(
+                            event=Shutdown(
+                                reason="Gazebo exited; shutting down ROS/Nav2 stack"
+                            )
+                        )
+                    ],
+                )
+            ),
+            RegisterEventHandler(
+                OnProcessExit(
+                    target_action=gazebo_server,
                     on_exit=[
                         EmitEvent(
                             event=Shutdown(
@@ -180,7 +228,7 @@ def generate_launch_description():
                 executable="static_transform_publisher",
                 name="base_to_lidar_static_tf",
                 arguments=static_tf_args(
-                    "0.55", "0", "0.95", "0", "0", "0", "base_link", "lidar_link"
+                    "0.95", "0", "0.32", "0", "0", "0", "base_link", "lidar_link"
                 ),
             ),
             Node(
@@ -188,9 +236,9 @@ def generate_launch_description():
                 executable="static_transform_publisher",
                 name="base_to_gazebo_lidar_static_tf",
                 arguments=static_tf_args(
-                    "0.55",
-                    "0",
                     "0.95",
+                    "0",
+                    "0.32",
                     "0",
                     "0",
                     "0",
@@ -251,19 +299,19 @@ def generate_launch_description():
                 parameters=[
                     {
                         "use_sim_time": use_sim_time,
-                        "max_forward_thrust_n": 24.0,
-                        "max_reverse_thrust_n": 12.0,
-                        "max_speed_cmd_mps": 0.42,
-                        "yaw_to_thrust_n_per_radps": 58.0,
+                        "max_forward_thrust_n": 58.0,
+                        "max_reverse_thrust_n": 20.0,
+                        "max_speed_cmd_mps": 0.92,
+                        "yaw_to_thrust_n_per_radps": 112.0,
                         "yaw_sign": 1.0,
-                        "yaw_rate_feedback_gain": 0.25,
-                        "max_yaw_rate_cmd_radps": 1.15,
+                        "yaw_rate_feedback_gain": 0.10,
+                        "max_yaw_rate_cmd_radps": 1.90,
                         "cmd_timeout_s": 0.8,
-                        "thrust_slew_rate_nps": 28.0,
-                        "turn_throttle_reduction": 0.55,
-                        "min_turn_throttle_fraction": 0.25,
+                        "thrust_slew_rate_nps": 82.0,
+                        "turn_throttle_reduction": 0.10,
+                        "min_turn_throttle_fraction": 0.82,
                         "speed_feedback_gain_n_per_mps": 0.0,
-                        "speed_feedforward_fraction": 0.85,
+                        "speed_feedforward_fraction": 1.0,
                         "odom_timeout_s": 0.7,
                     }
                 ],
@@ -279,19 +327,21 @@ def generate_launch_description():
                         "raw_topic": "/asv/lidar/scan_raw",
                         "filtered_topic": "/asv/lidar/scan",
                         "min_valid_range": 0.75,
+                        "drop_max_range_returns": True,
+                        "max_range_return_margin_m": 0.60,
                         "fallback_frame_id": "lidar_link",
                         "force_frame_id": True,
                         "restamp_scan": True,
                         "stamp_future_offset_s": 0.20,
-                        "sensor_x": 0.55,
+                        "sensor_x": 0.95,
                         "sensor_y": 0.0,
                         "keep_angle_min": -2.05,
                         "keep_angle_max": 2.05,
-                        "cluster_gap_m": 0.24,
-                        "min_cluster_points": 4,
-                        "min_cluster_width_m": 0.12,
-                        "max_cluster_width_m": 0.85,
-                        "max_cluster_points": 70,
+                        "cluster_gap_m": 0.45,
+                        "min_cluster_points": 1,
+                        "min_cluster_width_m": 0.0,
+                        "max_cluster_width_m": 1.40,
+                        "max_cluster_points": 100,
                     }
                 ],
             ),
@@ -305,7 +355,7 @@ def generate_launch_description():
                         "use_sim_time": use_sim_time,
                         "scan_topic": "/asv/lidar/scan",
                         "cloud_topic": "/asv/lidar/points_filtered",
-                        "range_cutoff": 10.0,
+                        "range_cutoff": 9.4,
                     }
                 ],
             ),
@@ -320,14 +370,14 @@ def generate_launch_description():
                         "odom_topic": "/asv/odom",
                         "set_pose_service": "/world/tecnofest_asv_course/set_pose",
                         "entity_name": "gamantaray_boat",
-                        "min_z": -0.35,
+                        "min_z": -0.90,
                         "restore_z": 0.30,
                         "max_abs_x": 70.0,
                         "max_abs_y": 30.0,
                         "safe_x": -49.0,
                         "safe_y": -8.0,
                         "safe_yaw": 0.42,
-                        "max_abs_roll_pitch_rad": 1.20,
+                        "max_abs_roll_pitch_rad": 3.05,
                     }
                 ],
             ),
@@ -357,6 +407,24 @@ def generate_launch_description():
                         "odom_topic": "/asv/odom",
                         "fixed_frame": "odom",
                         "publish_in_fixed_frame": False,
+                        "frame_locked": True,
+                        "publish_period_s": 0.20,
+                    }
+                ],
+            ),
+            Node(
+                package="gamantaray_boat_sim",
+                executable="local_window_marker",
+                name="local_window_marker",
+                output="screen",
+                condition=IfCondition(use_rviz),
+                parameters=[
+                    {
+                        "use_sim_time": use_sim_time,
+                        "frame_id": "base_link",
+                        "radius_m": 10.0,
+                        "z_offset_m": 0.04,
+                        "publish_period_s": 0.50,
                     }
                 ],
             ),
@@ -390,7 +458,11 @@ def generate_launch_description():
                         "scan_topic": "/asv/lidar/scan",
                         "marker_topic": "/asv/perception/lidar_obstacles",
                         "marker_frame": "lidar_link",
-                        "max_range": 12.0,
+                        "max_range": 10.0,
+                        "enforce_local_window": True,
+                        "local_window_radius_m": 10.0,
+                        "sensor_x": 0.95,
+                        "sensor_y": 0.0,
                         "cluster_gap_m": 0.40,
                         "min_cluster_points": 4,
                         "publish_period_s": 0.35,
@@ -430,7 +502,7 @@ def generate_launch_description():
                 ],
             ),
             TimerAction(
-                period=24.0,
+                period=16.0,
                 actions=[
                     Node(
                         package="gamantaray_boat_sim",
@@ -442,13 +514,16 @@ def generate_launch_description():
                                 "use_sim_time": use_sim_time,
                                 "waypoint_file": waypoint_file,
                                 "target_color": target_color,
-                                "start_delay_s": 2.0,
+                                "start_delay_s": 1.0,
                                 "use_through_poses": False,
                                 "prereq_timeout_s": 90.0,
-                                "waypoint_acceptance_radius_m": 3.40,
-                                "waypoint_check_period_s": 0.20,
+                                "waypoint_acceptance_radius_m": 5.50,
+                                "waypoint_passed_margin_m": 2.00,
+                                "waypoint_passed_cross_track_m": 6.50,
+                                "waypoint_check_period_s": 0.10,
+                                "waypoint_advance_pause_s": 0.15,
                                 "status_period_s": 1.0,
-                                "max_goal_retries": 3,
+                                "max_goal_retries": 1,
                             }
                         ],
                     )
@@ -468,7 +543,21 @@ def generate_launch_description():
                         ],
                         output="screen",
                         name="ardurover_sitl_terminal",
-                        condition=ardupilot_condition,
+                        condition=ardupilot_terminal_condition,
+                    ),
+                    ExecuteProcess(
+                        cmd=[
+                            "ros2",
+                            "run",
+                            "gamantaray_boat_sim",
+                            "ardupilot_sitl_terminal",
+                            "--param-file",
+                            ardupilot_params,
+                            "--no-terminal",
+                        ],
+                        output="screen",
+                        name="ardurover_sitl_inline",
+                        condition=ardupilot_no_terminal_condition,
                     )
                 ],
             ),
@@ -484,13 +573,33 @@ def generate_launch_description():
                         parameters=[
                             {
                                 "use_sim_time": use_sim_time,
-                                "fcu_url": "udp://:14550@127.0.0.1:14555",
-                                "gcs_url": "",
+                                "fcu_url": "tcp://127.0.0.1:5760",
+                                "gcs_url": "udp-b://@127.0.0.1:14550",
                                 "target_system_id": 1,
                                 "target_component_id": 1,
+                                "plugin_allowlist": [
+                                    "command",
+                                    "global_position",
+                                    "home_position",
+                                    "imu",
+                                    "local_position",
+                                    "obstacle_distance_3d",
+                                    "sys_status",
+                                    "sys_time",
+                                    "waypoint",
+                                ],
+                                "plugin_denylist": ["*"],
                             }
                         ],
                     ),
+                ],
+            ),
+            TimerAction(
+                # Start proximity after ArduRover has had time to set EKF origin.
+                # Sending OA/proximity data too early can make ArduPilot query an
+                # invalid (0, 0, 0) Location while OA_TYPE=3 is active.
+                period=32.0,
+                actions=[
                     Node(
                         package="gamantaray_boat_sim",
                         executable="ardupilot_lidar_bridge",
@@ -502,10 +611,37 @@ def generate_launch_description():
                                 "use_sim_time": use_sim_time,
                                 "scan_topic": "/asv/lidar/scan",
                                 "output_topic": "/mavros/obstacle/send",
-                                "max_range": 18.0,
+                                "max_range": 10.0,
+                                "max_obstacles": 20,
+                                "min_separation_rad": 0.16,
+                                "publish_keepalive_obstacle": True,
+                                "keepalive_angle_rad": 3.14159265,
+                                "keepalive_distance_fraction": 0.95,
                             }
                         ],
                     ),
+                ],
+            ),
+            TimerAction(
+                # MAVROS mission services appear after heartbeat/version/home
+                # setup. Delay mission upload so AUTO/arming is not attempted
+                # while the waypoint plugin is still initializing.
+                period=45.0,
+                actions=[
+                    Node(
+                        package="gamantaray_boat_sim",
+                        executable="ardupilot_waypoint_mission",
+                        name="ardupilot_waypoint_mission",
+                        output="screen",
+                        condition=ardupilot_condition,
+                        parameters=[
+                            ardupilot_nav_file,
+                            {
+                                "use_sim_time": use_sim_time,
+                                "waypoint_file": waypoint_file,
+                            },
+                        ],
+                    )
                 ],
             ),
         ]

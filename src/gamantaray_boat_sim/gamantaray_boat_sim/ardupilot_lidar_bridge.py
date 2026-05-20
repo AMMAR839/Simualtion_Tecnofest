@@ -24,7 +24,16 @@ class ArduPilotLidarBridge(Node):
         self.min_separation_rad = float(
             self.declare_parameter("min_separation_rad", 0.20).value
         )
-        self.max_range = float(self.declare_parameter("max_range", 18.0).value)
+        self.max_range = float(self.declare_parameter("max_range", 10.0).value)
+        self.publish_keepalive_obstacle = bool(
+            self.declare_parameter("publish_keepalive_obstacle", True).value
+        )
+        self.keepalive_angle_rad = float(
+            self.declare_parameter("keepalive_angle_rad", math.pi).value
+        )
+        self.keepalive_distance_fraction = float(
+            self.declare_parameter("keepalive_distance_fraction", 0.95).value
+        )
 
         scan_qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
         self.publisher = self.create_publisher(ObstacleDistance3D, self.output_topic, 20)
@@ -46,6 +55,15 @@ class ArduPilotLidarBridge(Node):
                 selected.append((distance, angle))
             if len(selected) >= self.max_obstacles:
                 break
+
+        if not selected and self.publish_keepalive_obstacle:
+            selected.append(
+                (
+                    min(scan.range_max, self.max_range)
+                    * max(0.10, min(1.00, self.keepalive_distance_fraction)),
+                    self.keepalive_angle_rad,
+                )
+            )
 
         for obstacle_id, (distance, angle) in enumerate(selected):
             msg = ObstacleDistance3D()

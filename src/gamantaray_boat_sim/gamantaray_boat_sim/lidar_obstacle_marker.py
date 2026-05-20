@@ -18,6 +18,14 @@ class LidarObstacleMarker(Node):
         ).value
         self.marker_frame = self.declare_parameter("marker_frame", "lidar_link").value
         self.max_range = float(self.declare_parameter("max_range", 18.0).value)
+        self.enforce_local_window = bool(
+            self.declare_parameter("enforce_local_window", True).value
+        )
+        self.local_window_radius_m = float(
+            self.declare_parameter("local_window_radius_m", self.max_range).value
+        )
+        self.sensor_x = float(self.declare_parameter("sensor_x", 0.95).value)
+        self.sensor_y = float(self.declare_parameter("sensor_y", 0.0).value)
         self.cluster_gap_m = float(self.declare_parameter("cluster_gap_m", 0.55).value)
         self.min_cluster_points = int(
             self.declare_parameter("min_cluster_points", 4).value
@@ -49,10 +57,10 @@ class LidarObstacleMarker(Node):
         clusters = self.cluster_scan(scan)
         markers = []
         for marker_id, cluster in enumerate(clusters[: self.max_markers], start=1):
-            markers.append(self.cluster_marker(marker_id, scan, cluster))
+            markers.extend(self.cluster_markers(marker_id, scan, cluster))
         for marker_id in range(len(markers) + 1, self.last_marker_count + 1):
             markers.append(self.delete_marker(marker_id, scan))
-        self.last_marker_count = len(clusters[: self.max_markers])
+        self.last_marker_count = len(markers)
         self.publisher.publish(MarkerArray(markers=markers))
 
     def cluster_scan(self, scan):
@@ -67,6 +75,8 @@ class LidarObstacleMarker(Node):
                 in_range = scan.range_min <= distance <= min(scan.range_max, self.max_range)
                 if in_range:
                     point = (distance * math.cos(angle), distance * math.sin(angle))
+                    if not self.point_inside_local_window(point):
+                        point = None
 
             if point is None:
                 self.flush_cluster(clusters, current)
@@ -117,7 +127,43 @@ class LidarObstacleMarker(Node):
         marker.action = Marker.DELETE
         return marker
 
-    def cluster_marker(self, marker_id, scan, cluster):
+    def cluster_markers(self, marker_id, scan, cluster):
+        outer_id = marker_id * 2 - 1
+        inner_id = marker_id * 2
+        return [
+            self.cluster_marker(
+                outer_id,
+                scan,
+                cluster,
+                scale_multiplier=1.65,
+                red=0.58,
+                green=0.12,
+                blue=0.95,
+                alpha=0.70,
+            ),
+            self.cluster_marker(
+                inner_id,
+                scan,
+                cluster,
+                scale_multiplier=0.85,
+                red=0.0,
+                green=0.95,
+                blue=1.0,
+                alpha=0.85,
+            ),
+        ]
+
+    def cluster_marker(
+        self,
+        marker_id,
+        scan,
+        cluster,
+        scale_multiplier,
+        red,
+        green,
+        blue,
+        alpha,
+    ):
         marker = Marker()
         marker.header = self.marker_header(scan)
         marker.ns = "lidar_cluster"
@@ -128,16 +174,23 @@ class LidarObstacleMarker(Node):
         marker.pose.position.y = cluster["y"]
         marker.pose.position.z = 0.25
         marker.pose.orientation.w = 1.0
-        marker.scale.x = cluster["size"]
-        marker.scale.y = cluster["size"]
+        marker.scale.x = cluster["size"] * scale_multiplier
+        marker.scale.y = cluster["size"] * scale_multiplier
         marker.scale.z = 0.50
-        marker.color.r = 1.0
-        marker.color.g = 0.84
-        marker.color.b = 0.05
-        marker.color.a = 0.90
+        marker.color.r = red
+        marker.color.g = green
+        marker.color.b = blue
+        marker.color.a = alpha
         marker.lifetime.sec = 0
         marker.lifetime.nanosec = 0
         return marker
+
+    def point_inside_local_window(self, point):
+        if not self.enforce_local_window:
+            return True
+        local_x = point[0] + self.sensor_x
+        local_y = point[1] + self.sensor_y
+        return math.hypot(local_x, local_y) <= self.local_window_radius_m
 
     def point_distance(self, first, second):
         return math.hypot(first[0] - second[0], first[1] - second[1])

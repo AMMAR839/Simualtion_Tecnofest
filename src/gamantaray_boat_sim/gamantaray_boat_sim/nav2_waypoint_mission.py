@@ -37,7 +37,10 @@ class Nav2WaypointMission(Node):
         self.declare_parameter("start_delay_s", 8.0)
         self.declare_parameter("use_through_poses", False)
         self.declare_parameter("prereq_timeout_s", 90.0)
-        self.declare_parameter("waypoint_acceptance_radius_m", 1.35)
+        self.declare_parameter("waypoint_acceptance_radius_m", 1.80)
+        self.declare_parameter("waypoint_check_period_s", 0.20)
+        self.declare_parameter("status_period_s", 1.0)
+        self.declare_parameter("max_goal_retries", 3)
         self.status_pub = self.create_publisher(String, "/asv/navigation/status", 10)
         self.clock_seen = False
         self.odom_seen = False
@@ -124,50 +127,75 @@ class Nav2WaypointMission(Node):
                 self.run_through_poses(navigator, waypoints)
                 return
 
+            max_retries = max(0, int(self.get_parameter("max_goal_retries").value))
+            check_period_s = max(
+                0.05, float(self.get_parameter("waypoint_check_period_s").value)
+            )
+            status_period_s = max(
+                check_period_s, float(self.get_parameter("status_period_s").value)
+            )
             for index, (name, pose) in enumerate(waypoints, start=1):
-                pose.header.stamp = navigator.get_clock().now().to_msg()
-                self.publish_status(f"nav2_waypoint_goal:{index}:{name}")
-                navigator.goToPose(pose)
-                reached_by_radius = False
-                while rclpy.ok():
-                    rclpy.spin_once(self, timeout_sec=0.0)
+                waypoint_reached = False
+                for attempt in range(1, max_retries + 2):
+                    pose.header.stamp = navigator.get_clock().now().to_msg()
+                    suffix = "" if attempt == 1 else f":retry{attempt - 1}"
+                    self.publish_status(f"nav2_waypoint_goal:{index}:{name}{suffix}")
+                    navigator.goToPose(pose)
+                    reached_by_radius = False
+                    last_running_status = 0.0
+                    while rclpy.ok():
+                        rclpy.spin_once(self, timeout_sec=0.0)
+                        if self.distance_to_pose(pose) <= float(
+                            self.get_parameter("waypoint_acceptance_radius_m").value
+                        ):
+                            reached_by_radius = True
+                            self.cancel_current_task(navigator)
+                            break
+                        if navigator.isTaskComplete():
+                            break
+                        feedback = navigator.getFeedback()
+                        now = time.monotonic()
+                        if feedback and now - last_running_status >= status_period_s:
+                            self.publish_status(f"nav2_running:{index}:{name}")
+                            last_running_status = now
+                        time.sleep(check_period_s)
+
+                    if not rclpy.ok():
+                        return
+
+                    if reached_by_radius:
+                        self.publish_status(f"nav2_waypoint_reached:{index}:{name}")
+                        time.sleep(0.5)
+                        waypoint_reached = True
+                        break
+
+                    result = navigator.getResult()
+                    if result == TaskResult.SUCCEEDED:
+                        self.publish_status(f"nav2_waypoint_reached:{index}:{name}")
+                        waypoint_reached = True
+                        break
                     if self.distance_to_pose(pose) <= float(
                         self.get_parameter("waypoint_acceptance_radius_m").value
                     ):
-                        reached_by_radius = True
-                        self.cancel_current_task(navigator)
+                        self.publish_status(f"nav2_waypoint_reached:{index}:{name}")
+                        waypoint_reached = True
                         break
-                    if navigator.isTaskComplete():
-                        break
-                    feedback = navigator.getFeedback()
-                    if feedback:
-                        self.publish_status(f"nav2_running:{index}:{name}")
-                    time.sleep(1.0)
-
-                if not rclpy.ok():
+                    if result == TaskResult.CANCELED and attempt > max_retries:
+                        self.publish_status(f"nav2_waypoint_canceled:{index}:{name}")
+                        self.publish_status("nav2_waypoints_canceled")
+                        return
+                    if attempt <= max_retries:
+                        self.publish_status(
+                            f"nav2_waypoint_retry:{index}:{name}:attempt{attempt}"
+                        )
+                        time.sleep(0.8)
+                        continue
+                    self.publish_status(f"nav2_waypoint_failed:{index}:{name}")
+                    self.publish_status("nav2_waypoints_failed")
                     return
 
-                if reached_by_radius:
-                    self.publish_status(f"nav2_waypoint_reached:{index}:{name}")
-                    time.sleep(0.5)
-                    continue
-
-                result = navigator.getResult()
-                if result == TaskResult.SUCCEEDED:
-                    self.publish_status(f"nav2_waypoint_reached:{index}:{name}")
-                    continue
-                if self.distance_to_pose(pose) <= float(
-                    self.get_parameter("waypoint_acceptance_radius_m").value
-                ):
-                    self.publish_status(f"nav2_waypoint_reached:{index}:{name}")
-                    continue
-                if result == TaskResult.CANCELED:
-                    self.publish_status(f"nav2_waypoint_canceled:{index}:{name}")
-                    self.publish_status("nav2_waypoints_canceled")
+                if not waypoint_reached:
                     return
-                self.publish_status(f"nav2_waypoint_failed:{index}:{name}")
-                self.publish_status("nav2_waypoints_failed")
-                return
 
             self.publish_status("nav2_waypoints_succeeded")
         except RCLError:

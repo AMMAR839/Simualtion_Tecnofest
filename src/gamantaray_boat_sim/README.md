@@ -10,6 +10,9 @@ Thruster memakai `gz::sim::systems::Thruster` sehingga kapal benar-benar
 bergerak dari gaya dorong di Gazebo. Wave visual dan damping hidrodinamika
 dipakai sebagai pendekatan simulasi misi yang stabil, bukan klaim model
 hidrodinamika penuh.
+Kapal juga memakai buoyancy volume yang diproses oleh
+`gz-waves1-hydrodynamics-system`, ditambah anti-sink guard ringan sebagai
+pengaman jika solver fisika sempat membuat kapal masuk di bawah mesh ombak.
 
 World utama hanya menampilkan elemen lintasan misi: air, ASV, buoy batas,
 obstacle buoy, dan target buoy. Garis bantu start/finish dan frame area buatan
@@ -27,8 +30,9 @@ Warna air berasal dari shader lokal
 `models/tecnofest_ocean_waves/materials/waves_fs.glsl`. Refleksi skybox pada
 shader dikurangi dan fallback material biru ditambahkan di `model.sdf` supaya
 water surface tidak tampil putih ketika dilihat di Gazebo. Model wave memakai
-`tile_size` `100 20`, sehingga dynamic wave mesh dari plugin Gazebo juga
-dibatasi ke lebar lintasan 20 m, bukan tile default 100 m x 100 m.
+`tile_size` `104 26`, mengikuti area course yang dibuat mepet dengan objek
+lintasan. Parameter wave sengaja dibuat halus (`cell_count` 96, update 18 Hz)
+agar physics kapal, costmap, dan RViz tidak terlalu berat.
 
 ## Build
 
@@ -50,10 +54,26 @@ ros2 launch gamantaray_boat_sim simple_ocean_gamantaray.launch.py
 Jalankan hanya Gazebo, bridge, sensor, dan kontrol thruster untuk tes manual:
 
 ```bash
-ros2 launch gamantaray_boat_sim simple_ocean_gamantaray.launch.py use_nav2:=false
+ros2 launch gamantaray_boat_sim simple_ocean_gamantaray.launch.py navigation_mode:=manual
 ```
 
-RViz akan terbuka otomatis untuk menampilkan `/plan`, costmap, TF, odometry,
+Pilih mode navigasi dari launch utama:
+
+```bash
+ros2 launch gamantaray_boat_sim simple_ocean_gamantaray.launch.py navigation_mode:=nav2
+ros2 launch gamantaray_boat_sim simple_ocean_gamantaray.launch.py navigation_mode:=manual
+ros2 launch gamantaray_boat_sim simple_ocean_gamantaray.launch.py navigation_mode:=ardupilot
+```
+
+`nav2` memakai Nav2 dan `/cmd_vel_to_thrusters`. `manual` hanya menjalankan
+Gazebo, bridge, sensor, dan mapper `/cmd_vel`. `ardupilot` menjalankan
+ArduRover SITL + MAVROS + bridge LiDAR ke MAVLink proximity; Nav2 tidak
+dijalankan pada mode ini.
+Pada mode `ardupilot`, launch membuka terminal GUI terpisah untuk proses
+ArduRover SITL. Jika terminal GUI tidak tersedia, output SITL akan fallback ke
+terminal launch utama.
+
+RViz akan terbuka otomatis untuk menampilkan `/plan`, local costmap, TF, odometry,
 LiDAR, marker obstacle LiDAR, dan marker model kapal. Marker kapal di RViz
 memakai proxy ringan agar RViz tetap responsif; mesh `.obj` asli kapal tetap
 ditampilkan di Gazebo. View RViz memakai target frame `base_link`, jadi kamera
@@ -137,7 +157,9 @@ Sensor dan navigasi:
 - `/asv/odom`
 - `/asv/imu/data`
 - `/asv/gps/fix`
+- `/asv/lidar/scan_raw`
 - `/asv/lidar/scan`
+- `/asv/visualization/lidar_rays`
 - `/asv/camera/front/image`
 - `/asv/camera/front/camera_info`
 - `/asv/perception/target_selection`
@@ -155,6 +177,40 @@ Frame sensor dari Gazebo memakai nama aktual:
 
 Launch juga menerbitkan alias TF `lidar_link` dan `front_camera_link` dari
 `base_link` untuk kompatibilitas.
+
+`/asv/lidar/scan_raw` adalah output langsung Gazebo. `/asv/lidar/scan` adalah
+hasil filter footprint kapal sendiri dan dipakai oleh Nav2, RViz obstacle
+marker, serta bridge ArduPilot. Path biru `/plan` adalah referensi global
+menuju waypoint; obstacle avoidance buoy dilakukan oleh local costmap dan DWB
+controller dari data LiDAR 2D.
+
+## Mode ArduPilot
+
+Mode ArduPilot memakai ArduRover SITL dari:
+
+```text
+/home/ammar/ardu_ws/src/ardupilot/Tools/autotest/sim_vehicle.py
+```
+
+Plugin Gazebo ArduPilot diambil dari:
+
+```text
+/home/ammar/ardupilot_gazebo/build/libArduPilotPlugin.so
+```
+
+Parameter awal ASV ada di:
+
+```text
+src/gamantaray_boat_sim/config/ardupilot_asv.parm
+```
+
+Mission Planner adalah ground control station. Setelah launch
+`navigation_mode:=ardupilot`, hubungkan Mission Planner ke MAVLink UDP SITL
+yang keluar dari ArduPilot. Konfigurasi obstacle avoidance memakai
+`PRX1_TYPE=2`, `AVOID_ENABLE=7`, dan `OA_TYPE=3` untuk proximity MAVLink dan
+Dijkstra+BendyRuler. Ini adalah jalur awal integrasi; tuning waypoint AUTO /
+GUIDED dan validasi proximity di Mission Planner tetap perlu dilakukan saat
+SITL sudah connect.
 
 ## Validasi Cepat
 

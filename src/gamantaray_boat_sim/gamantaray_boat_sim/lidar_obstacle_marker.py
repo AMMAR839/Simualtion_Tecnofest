@@ -5,6 +5,7 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import LaserScan
+from std_msgs.msg import Header
 from visualization_msgs.msg import Marker, MarkerArray
 
 
@@ -15,6 +16,7 @@ class LidarObstacleMarker(Node):
         self.marker_topic = self.declare_parameter(
             "marker_topic", "/asv/perception/lidar_obstacles"
         ).value
+        self.marker_frame = self.declare_parameter("marker_frame", "lidar_link").value
         self.max_range = float(self.declare_parameter("max_range", 18.0).value)
         self.cluster_gap_m = float(self.declare_parameter("cluster_gap_m", 0.55).value)
         self.min_cluster_points = int(
@@ -25,6 +27,7 @@ class LidarObstacleMarker(Node):
             self.declare_parameter("publish_period_s", 0.20).value
         )
         self.last_publish_time = None
+        self.last_marker_count = 0
 
         marker_qos = QoSProfile(depth=5, reliability=ReliabilityPolicy.RELIABLE)
         scan_qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
@@ -44,9 +47,12 @@ class LidarObstacleMarker(Node):
         self.last_publish_time = now
 
         clusters = self.cluster_scan(scan)
-        markers = [self.delete_all_marker(scan)]
+        markers = []
         for marker_id, cluster in enumerate(clusters[: self.max_markers], start=1):
             markers.append(self.cluster_marker(marker_id, scan, cluster))
+        for marker_id in range(len(markers) + 1, self.last_marker_count + 1):
+            markers.append(self.delete_marker(marker_id, scan))
+        self.last_marker_count = len(clusters[: self.max_markers])
         self.publisher.publish(MarkerArray(markers=markers))
 
     def cluster_scan(self, scan):
@@ -96,21 +102,24 @@ class LidarObstacleMarker(Node):
             }
         )
 
-    def delete_all_marker(self, scan):
+    def marker_header(self, scan):
+        header = Header()
+        header.frame_id = self.marker_frame or scan.header.frame_id or "lidar_link"
+        header.stamp.sec = 0
+        header.stamp.nanosec = 0
+        return header
+
+    def delete_marker(self, marker_id, scan):
         marker = Marker()
-        marker.header = scan.header
-        if not marker.header.frame_id:
-            marker.header.frame_id = "base_link"
+        marker.header = self.marker_header(scan)
         marker.ns = "lidar_cluster"
-        marker.id = 0
-        marker.action = Marker.DELETEALL
+        marker.id = marker_id
+        marker.action = Marker.DELETE
         return marker
 
     def cluster_marker(self, marker_id, scan, cluster):
         marker = Marker()
-        marker.header = scan.header
-        if not marker.header.frame_id:
-            marker.header.frame_id = "base_link"
+        marker.header = self.marker_header(scan)
         marker.ns = "lidar_cluster"
         marker.id = marker_id
         marker.type = Marker.CYLINDER
@@ -127,7 +136,7 @@ class LidarObstacleMarker(Node):
         marker.color.b = 0.05
         marker.color.a = 0.90
         marker.lifetime.sec = 0
-        marker.lifetime.nanosec = int(self.publish_period_s * 3.0 * 1e9)
+        marker.lifetime.nanosec = 0
         return marker
 
     def point_distance(self, first, second):

@@ -31,11 +31,17 @@ Gazebo /asv/odom
 Obstacle avoidance:
 
 ```text
-/asv/lidar/scan
-        -> local_costmap dan global_costmap
+/asv/lidar/scan_raw
+        -> lidar_scan_filter.py
+        -> /asv/lidar/scan
+        -> local_costmap
         -> obstacle layer menandai buoy/halangan
-        -> planner/controller memilih jalur yang tidak menabrak
+        -> controller memilih belokan lokal yang tidak menabrak
 ```
+
+`/asv/lidar/scan_raw` adalah data langsung dari Gazebo. Topic yang dipakai
+Nav2 adalah `/asv/lidar/scan` karena sudah difilter supaya badan kapal sendiri
+tidak ikut terbaca sebagai obstacle.
 
 Kamera:
 
@@ -97,6 +103,8 @@ src/gamantaray_boat_sim/models/gamantaray_boat/model.sdf
 ```
 
 Atur update rate, resolusi, dan parameter LiDAR/kamera/GPS/IMU di sini.
+LiDAR fisik Gazebo dipasang di atas mast sekitar `x=0.55, z=0.95`, publish ke
+`/asv/lidar/scan_raw`, lalu difilter oleh `lidar_scan_filter.py`.
 
 Visualisasi RViz:
 
@@ -122,6 +130,19 @@ src/gamantaray_boat_sim/launch/simple_ocean_gamantaray.launch.py
 
 Launch ini menjalankan Gazebo, bridge ROS-Gazebo, TF sensor, Nav2, waypoint
 mission, target detector, thruster mapper, dan RViz.
+
+Mode navigasi dipilih di launch:
+
+```bash
+ros2 launch gamantaray_boat_sim simple_ocean_gamantaray.launch.py navigation_mode:=nav2
+ros2 launch gamantaray_boat_sim simple_ocean_gamantaray.launch.py navigation_mode:=manual
+ros2 launch gamantaray_boat_sim simple_ocean_gamantaray.launch.py navigation_mode:=ardupilot
+```
+
+`nav2` menjalankan Nav2 + waypoint mission. `manual` menjalankan sensor dan
+mapper `/cmd_vel` tanpa autonomous stack. `ardupilot` menjalankan ArduRover
+SITL, MAVROS, dan bridge `/asv/lidar/scan` ke MAVLink proximity; Nav2 tidak
+dijalankan pada mode ini.
 
 ## Cara Mengatur Waypoint
 
@@ -179,12 +200,16 @@ Obstacle avoidance diatur terutama di `nav2_params.yaml`.
 Bagian LiDAR masuk costmap:
 
 ```yaml
-obstacle_layer:
-  observation_sources: scan
-  scan:
-    topic: /asv/lidar/scan
-    obstacle_max_range: 12.0
-    raytrace_max_range: 20.0
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      plugins: ["obstacle_layer", "inflation_layer"]
+      obstacle_layer:
+        observation_sources: scan
+        scan:
+          topic: /asv/lidar/scan
+          obstacle_max_range: 8.0
+          raytrace_max_range: 12.0
 ```
 
 Parameter penting:
@@ -194,18 +219,23 @@ Parameter penting:
 - `raytrace_max_range`: jarak clearing ray untuk membersihkan obstacle lama.
 - `inflation_radius`: jarak aman tambahan di sekitar obstacle.
 - `cost_scaling_factor`: seberapa cepat cost turun saat menjauh dari obstacle.
-- `robot_radius`: radius aman kapal untuk costmap.
+- `footprint` dan `footprint_padding`: bentuk aman kapal untuk costmap.
+
+Global costmap sengaja tidak memakai obstacle layer. Path biru `/plan` tetap
+menjadi rute referensi waypoint, sedangkan penghindaran buoy dilakukan oleh
+local costmap dan DWB controller. Ini mengurangi blob besar pada global costmap
+dan membuat visual path lebih mudah dibaca.
 
 Jika kapal terlalu dekat dengan buoy:
 
 - Naikkan `inflation_radius`.
-- Naikkan `robot_radius` sedikit.
-- Turunkan `desired_linear_vel`.
+- Naikkan `inflation_radius` sedikit.
+- Turunkan `max_velocity[0]`.
 
 Jika kapal terlalu takut dan jalur terlalu jauh:
 
 - Turunkan `inflation_radius`.
-- Turunkan `robot_radius` sedikit.
+- Turunkan `footprint_padding` sedikit.
 - Naikkan `obstacle_max_range` hanya jika LiDAR perlu melihat obstacle lebih
   jauh.
 
@@ -213,19 +243,21 @@ Jika kapal terlalu takut dan jalur terlalu jauh:
 
 Kecepatan yang diminta Nav2 diatur di `nav2_params.yaml`.
 
-Bagian controller:
+Bagian DWB controller:
 
 ```yaml
 FollowPath:
-  desired_linear_vel: 0.55
-  lookahead_dist: 1.4
+  max_vel_x: 0.48
+  max_vel_theta: 0.92
+  BaseObstacle.scale: 0.10
+  PathAlign.scale: 11.0
 ```
 
 Bagian velocity smoother:
 
 ```yaml
-max_velocity: [0.60, 0.0, 0.85]
-max_accel: [0.45, 0.0, 1.00]
+max_velocity: [0.48, 0.0, 0.85]
+max_accel: [0.22, 0.0, 0.95]
 ```
 
 Mapping `/cmd_vel` ke thruster ada di `cmd_vel_to_thrusters.py`.
@@ -233,16 +265,15 @@ Mapping `/cmd_vel` ke thruster ada di `cmd_vel_to_thrusters.py`.
 Parameter default penting:
 
 ```text
-max_forward_thrust_n = 100.0
-max_reverse_thrust_n = 55.0
-max_speed_cmd_mps = 0.65
-yaw_to_thrust_n_per_radps = 100.0
-max_yaw_rate_cmd_radps = 0.80
+max_forward_thrust_n = 30.0
+max_reverse_thrust_n = 12.0
+max_speed_cmd_mps = 0.62
+yaw_to_thrust_n_per_radps = 34.0
+max_yaw_rate_cmd_radps = 0.90
 ```
 
 Jika kapal terlalu lambat:
 
-- Naikkan `desired_linear_vel` sedikit.
 - Naikkan `max_velocity[0]`.
 - Jika masih kurang, naikkan `max_forward_thrust_n`.
 
@@ -250,7 +281,7 @@ Jika kapal zig-zag atau belok terlalu agresif:
 
 - Turunkan `max_velocity[2]`.
 - Turunkan `yaw_to_thrust_n_per_radps`.
-- Naikkan `lookahead_dist` supaya tracking path lebih halus.
+- Turunkan `vtheta_samples` atau `acc_lim_theta` jika putaran terlalu tajam.
 
 ## Visualisasi Path
 
@@ -264,9 +295,11 @@ Yang perlu dilihat di RViz:
 
 - `/plan`: path global Nav2.
 - `/plan_smoothed`: path smoothing jika topic tersedia.
-- `/global_costmap/costmap`: costmap global.
 - `/local_costmap/costmap`: costmap lokal di sekitar kapal.
+- `/global_costmap/costmap`: opsional untuk debug; default RViz dibuat tidak
+  aktif agar tampilan lebih ringan.
 - `/asv/lidar/scan`: titik LiDAR untuk obstacle.
+- `/asv/visualization/lidar_rays`: garis beam/ray LiDAR.
 - `/asv/perception/lidar_obstacles`: marker kuning obstacle hasil clustering LiDAR.
 - `/asv/odom`: jejak odometry kapal.
 - `/asv/visualization/boat_model`: proxy visual kapal yang ringan.
@@ -350,6 +383,48 @@ tidak ada map statis. Ini sengaja dipilih karena arena berupa lintasan air
 dengan buoy, dan obstacle avoidance utama berasal dari LiDAR/costmap.
 
 GPS dan IMU tetap tersedia sebagai sensor, tetapi belum difusion sebagai pose
-utama. Untuk simulasi Gazebo, `/asv/odom` sudah cukup stabil. Fusion
-GPS+IMU+odom bisa ditambahkan nanti jika targetnya simulasi yang lebih mirip
-robot asli.
+utama. Untuk simulasi Gazebo, `/asv/odom` sudah cukup stabil. Jika nanti ingin
+mode GPS realistis seperti tutorial Nav2 GPS, tambahkan `robot_localization`
+dan `navsat_transform_node` untuk membuat transform `map -> odom` dari
+`/asv/gps/fix`, `/asv/imu/data`, dan odometry lokal.
+
+STVL tidak diaktifkan di default karena sensor utama saat ini adalah 2D
+`LaserScan`. STVL lebih cocok untuk depth camera atau 3D LiDAR yang publish
+`PointCloud2`, lalu masuk ke costmap sebagai voxel layer.
+
+## Mode ArduPilot
+
+Mode ArduPilot tidak mengganti Nav2; ia hanya opsi launch lain. File penting:
+
+```text
+src/gamantaray_boat_sim/config/ardupilot_asv.parm
+src/gamantaray_boat_sim/gamantaray_boat_sim/ardupilot_lidar_bridge.py
+```
+
+Alur ArduPilot:
+
+```text
+ArduRover SITL
+        -> ArduPilotPlugin
+        -> Gazebo thruster command
+
+/asv/lidar/scan
+        -> ardupilot_lidar_bridge.py
+        -> /mavros/obstacle/send
+        -> ArduPilot proximity / OA
+```
+
+Parameter utama di `ardupilot_asv.parm`:
+
+```text
+PRX1_TYPE 2
+AVOID_ENABLE 7
+OA_TYPE 3
+OA_BR_TYPE 1
+OA_BR_LOOKAHEAD 5.0
+OA_MARGIN_MAX 1.5
+```
+
+`PRX1_TYPE=2` berarti proximity dari MAVLink. `OA_TYPE=3` berarti Dijkstra
+dengan BendyRuler. Untuk rover/boat, BendyRuler horizontal (`OA_BR_TYPE=1`)
+yang dipakai karena kapal bergerak di bidang XY.

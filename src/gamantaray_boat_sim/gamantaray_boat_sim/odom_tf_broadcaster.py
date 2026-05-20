@@ -1,5 +1,3 @@
-import math
-
 import rclpy
 from geometry_msgs.msg import TransformStamped
 from nav_msgs.msg import Odometry
@@ -22,23 +20,14 @@ class OdomTfBroadcaster(Node):
 
     def on_odom(self, msg):
         transform = msg.pose.pose
-        orientation = transform.orientation
-        yaw = math.atan2(
-            2.0 * (orientation.w * orientation.z + orientation.x * orientation.y),
-            1.0 - 2.0 * (orientation.y * orientation.y + orientation.z * orientation.z),
-        )
-
         stamped = TransformStamped()
         stamped.header.stamp = msg.header.stamp
         stamped.header.frame_id = str(self.get_parameter("odom_frame").value) or "odom"
         stamped.child_frame_id = str(self.get_parameter("base_frame").value)
         stamped.transform.translation.x = transform.position.x
         stamped.transform.translation.y = transform.position.y
-        stamped.transform.translation.z = 0.0
-        stamped.transform.rotation.x = 0.0
-        stamped.transform.rotation.y = 0.0
-        stamped.transform.rotation.z = math.sin(yaw * 0.5)
-        stamped.transform.rotation.w = math.cos(yaw * 0.5)
+        stamped.transform.translation.z = transform.position.z
+        stamped.transform.rotation = transform.orientation
         self.broadcaster.sendTransform(stamped)
 
 

@@ -5,8 +5,8 @@ bt_navigator:
     robot_base_frame: base_link
     odom_topic: /asv/odom
     bt_loop_duration: 10
-    default_server_timeout: 20
-    wait_for_service_timeout: 1000
+    default_server_timeout: 30
+    wait_for_service_timeout: 3000
     navigators: ["navigate_to_pose", "navigate_through_poses"]
     navigate_to_pose:
       plugin: "nav2_bt_navigator::NavigateToPoseNavigator"
@@ -16,121 +16,154 @@ bt_navigator:
 controller_server:
   ros__parameters:
     use_sim_time: true
-    controller_frequency: 12.0
+    controller_frequency: 7.0
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.5
     min_theta_velocity_threshold: 0.001
-    failure_tolerance: 0.6
+    failure_tolerance: 1.0
     progress_checker_plugins: ["progress_checker"]
     goal_checker_plugins: ["general_goal_checker"]
     controller_plugins: ["FollowPath"]
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
-      required_movement_radius: 0.25
-      movement_time_allowance: 35.0
+      required_movement_radius: 0.10
+      movement_time_allowance: 90.0
     general_goal_checker:
       stateful: true
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 1.30
+      xy_goal_tolerance: 1.40
       yaw_goal_tolerance: 3.14
     FollowPath:
-      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
-      desired_linear_vel: 0.42
-      lookahead_dist: 1.8
-      min_lookahead_dist: 1.0
-      max_lookahead_dist: 3.0
-      lookahead_time: 1.2
-      rotate_to_heading_angular_vel: 0.35
-      transform_tolerance: 0.3
-      use_velocity_scaled_lookahead_dist: true
-      min_approach_linear_velocity: 0.10
-      approach_velocity_scaling_dist: 2.5
-      use_collision_detection: false
-      max_allowed_time_to_collision_up_to_carrot: 2.0
-      use_regulated_linear_velocity_scaling: true
-      use_cost_regulated_linear_velocity_scaling: true
-      regulated_linear_scaling_min_radius: 1.7
-      regulated_linear_scaling_min_speed: 0.10
-      use_rotate_to_heading: false
-      allow_reversing: false
-      max_angular_accel: 1.0
+      plugin: "dwb_core::DWBLocalPlanner"
+      debug_trajectory_details: false
+      transform_tolerance: 1.0
+      min_vel_x: 0.0
+      min_vel_y: 0.0
+      max_vel_x: 0.34
+      max_vel_y: 0.0
+      max_vel_theta: 1.10
+      min_speed_xy: 0.03
+      max_speed_xy: 0.34
+      min_speed_theta: 0.0
+      acc_lim_x: 0.14
+      acc_lim_y: 0.0
+      acc_lim_theta: 1.45
+      decel_lim_x: -0.24
+      decel_lim_y: 0.0
+      decel_lim_theta: -1.50
+      vx_samples: 7
+      vy_samples: 1
+      vtheta_samples: 28
+      sim_time: 2.6
+      linear_granularity: 0.12
+      angular_granularity: 0.05
+      xy_goal_tolerance: 1.40
+      trans_stopped_velocity: 0.05
+      short_circuit_trajectory_evaluation: true
+      stateful: true
+      critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
+      BaseObstacle.scale: 0.04
+      PathAlign.scale: 8.0
+      PathAlign.forward_point_distance: 1.40
+      GoalAlign.scale: 5.0
+      GoalAlign.forward_point_distance: 1.40
+      PathDist.scale: 9.0
+      GoalDist.scale: 8.0
+      RotateToGoal.scale: 0.7
+      RotateToGoal.slowing_factor: 5.0
+      RotateToGoal.lookahead_time: -1.0
 
 local_costmap:
   local_costmap:
     ros__parameters:
       use_sim_time: true
-      update_frequency: 6.0
-      publish_frequency: 3.0
+      update_frequency: 3.0
+      publish_frequency: 1.0
       global_frame: odom
       robot_base_frame: base_link
+      transform_tolerance: 1.0
       rolling_window: true
-      width: 12
-      height: 10
-      resolution: 0.10
-      robot_radius: 0.95
+      width: 10
+      height: 7
+      resolution: 0.15
+      footprint: "[[0.85, 0.48], [0.85, -0.48], [-1.05, -0.48], [-1.05, 0.48]]"
+      footprint_padding: 0.10
       plugins: ["obstacle_layer", "inflation_layer"]
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
         observation_sources: scan
+        footprint_clearing_enabled: true
+        combination_method: 1
         scan:
           topic: /asv/lidar/scan
+          sensor_frame: lidar_link
+          sensor_data_qos: true
           max_obstacle_height: 3.0
           clearing: true
           marking: true
           data_type: "LaserScan"
-          raytrace_max_range: 20.0
+          expected_update_rate: 1.0
+          observation_persistence: 0.20
+          inf_is_valid: true
+          raytrace_max_range: 8.0
           raytrace_min_range: 0.0
-          obstacle_max_range: 12.0
-          obstacle_min_range: 0.35
+          obstacle_max_range: 6.5
+          obstacle_min_range: 0.75
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 2.7
-        inflation_radius: 1.25
-      always_send_full_costmap: true
+        cost_scaling_factor: 8.0
+        inflation_radius: 0.60
+      always_send_full_costmap: false
 
 global_costmap:
   global_costmap:
     ros__parameters:
       use_sim_time: true
-      update_frequency: 2.0
-      publish_frequency: 1.0
+      update_frequency: 1.0
+      publish_frequency: 0.5
       global_frame: odom
       robot_base_frame: base_link
+      transform_tolerance: 1.0
       rolling_window: true
-      width: 260
-      height: 120
-      resolution: 0.25
-      robot_radius: 0.95
+      width: 130
+      height: 28
+      resolution: 0.35
+      footprint: "[[0.85, 0.48], [0.85, -0.48], [-1.05, -0.48], [-1.05, 0.48]]"
+      footprint_padding: 0.15
       track_unknown_space: false
-      # The global plan is the mission reference line between waypoints.
-      # LiDAR obstacles stay in the local costmap so boundary buoys do not
-      # make the global planner leave the course to search for a detour.
       plugins: ["inflation_layer"]
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
         observation_sources: scan
+        footprint_clearing_enabled: true
+        combination_method: 1
         scan:
           topic: /asv/lidar/scan
+          sensor_frame: lidar_link
+          sensor_data_qos: true
           max_obstacle_height: 3.0
           clearing: true
           marking: true
           data_type: "LaserScan"
-          raytrace_max_range: 25.0
+          expected_update_rate: 0.25
+          observation_persistence: 1.0
+          inf_is_valid: true
+          raytrace_max_range: 24.0
           raytrace_min_range: 0.0
-          obstacle_max_range: 14.0
-          obstacle_min_range: 0.35
+          obstacle_max_range: 18.0
+          obstacle_min_range: 0.45
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 2.6
-        inflation_radius: 1.30
-      always_send_full_costmap: true
+        cost_scaling_factor: 3.2
+        inflation_radius: 0.85
+      always_send_full_costmap: false
 
 planner_server:
   ros__parameters:
     use_sim_time: true
-    expected_planner_frequency: 5.0
+    expected_planner_frequency: 2.0
     planner_plugins: ["GridBased"]
     GridBased:
       plugin: "nav2_navfn_planner::NavfnPlanner"
@@ -155,7 +188,7 @@ behavior_server:
     global_costmap_topic: global_costmap/costmap_raw
     local_footprint_topic: local_costmap/published_footprint
     global_footprint_topic: global_costmap/published_footprint
-    cycle_frequency: 10.0
+    cycle_frequency: 6.0
     behavior_plugins: ["spin", "backup", "drive_on_heading", "wait"]
     spin:
       plugin: "nav2_behaviors::Spin"
@@ -168,7 +201,7 @@ behavior_server:
     local_frame: odom
     global_frame: odom
     robot_base_frame: base_link
-    transform_tolerance: 0.3
+    transform_tolerance: 1.0
     simulate_ahead_time: 2.0
     max_rotational_vel: 0.8
     min_rotational_vel: 0.2
@@ -188,13 +221,13 @@ waypoint_follower:
 velocity_smoother:
   ros__parameters:
     use_sim_time: true
-    smoothing_frequency: 20.0
+    smoothing_frequency: 10.0
     scale_velocities: false
     feedback: "OPEN_LOOP"
-    max_velocity: [0.50, 0.0, 0.65]
-    min_velocity: [-0.15, 0.0, -0.65]
-    max_accel: [0.22, 0.0, 0.60]
-    max_decel: [-0.35, 0.0, -0.75]
+    max_velocity: [0.34, 0.0, 1.00]
+    min_velocity: [-0.06, 0.0, -1.00]
+    max_accel: [0.14, 0.0, 1.20]
+    max_decel: [-0.24, 0.0, -1.25]
     odom_topic: /asv/odom
     odom_duration: 0.2
     deadband_velocity: [0.02, 0.0, 0.02]
@@ -217,9 +250,9 @@ collision_monitor:
       type: "polygon"
       action_type: "approach"
       footprint_topic: "/local_costmap/published_footprint"
-      time_before_collision: 1.2
+      time_before_collision: 0.7
       simulation_time_step: 0.1
-      min_points: 4
+      min_points: 8
       visualize: true
       enabled: true
     observation_sources: ["scan"]

@@ -54,11 +54,7 @@ class RvizBoatMarker(Node):
     def publish_boat_model(self):
         if self.publish_in_fixed_frame and self.latest_odom_pose is None:
             return
-        stamp = (
-            self.latest_odom_stamp
-            if self.publish_in_fixed_frame
-            else self.get_clock().now().to_msg()
-        )
+        stamp = self.latest_odom_stamp if self.publish_in_fixed_frame else self.get_clock().now().to_msg()
         markers = []
         if self.use_heavy_mesh:
             markers.append(self.mesh_marker(0, stamp))
@@ -83,15 +79,15 @@ class RvizBoatMarker(Node):
                 0.05, 0.05, 0.05, 1.0, 0.0, 1.570796, 0.0,
             ),
             self.cylinder_marker(
-                14, stamp, "lidar_mast", 0.15, 0.0, 0.85, 0.05, 0.05, 1.15,
+                14, stamp, "lidar_mast", 0.52, 0.0, 0.78, 0.05, 0.05, 1.42,
                 0.65, 0.65, 0.65, 1.0,
             ),
             self.box_marker(
-                15, stamp, "sensor_crossbar", 0.15, 0.0, 1.43, 0.16, 0.55, 0.05,
+                15, stamp, "sensor_crossbar", 0.52, 0.0, 0.98, 0.16, 0.40, 0.05,
                 0.72, 0.72, 0.72, 1.0,
             ),
             self.cylinder_marker(
-                16, stamp, "lidar_sensor", 0.35, 0.0, 1.42, 0.16, 0.16, 0.05,
+                16, stamp, "lidar_sensor", 0.55, 0.0, 0.95, 0.16, 0.16, 0.05,
                 0.05, 0.05, 0.05, 1.0,
             ),
             self.box_marker(

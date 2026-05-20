@@ -1,0 +1,50 @@
+# Gamantaray ASV ArduRover SITL defaults.
+# Loaded only when using:
+# ros2 launch gamantaray_boat_sim simple_ocean_gamantaray.launch.py navigation_mode:=ardupilot
+
+# Differential / skid motorboat output. These match the ArduPilotPlugin
+# control channels in models/gamantaray_boat/model.sdf.
+FRAME_CLASS 2
+SERVO1_FUNCTION 73
+SERVO3_FUNCTION 74
+SERVO1_MIN 1000
+SERVO1_TRIM 1500
+SERVO1_MAX 2000
+SERVO3_MIN 1000
+SERVO3_TRIM 1500
+SERVO3_MAX 2000
+
+# Conservative first-run speed so obstacle avoidance has enough time to react
+# in the narrow TEKNOFEST course.
+CRUISE_SPEED 1.0
+CRUISE_THROTTLE 45
+WP_SPEED 1.0
+WP_RADIUS 1.5
+WP_OVERSHOOT 1.0
+ATC_STR_RAT_FF 0.2
+PILOT_STEER_TYPE 0
+
+# MAVLink proximity input from /asv/lidar/scan via MAVROS.
+# ArduPilot docs use PRX1_TYPE=2 for MAVLink proximity data.
+PRX1_TYPE 2
+PRX1_MIN 0.8
+PRX1_MAX 18.0
+PRX1_ORIENT 0
+AVOID_ENABLE 7
+AVOID_MARGIN 1.5
+
+# Object avoidance path planner. OA_TYPE=3 enables Dijkstra + BendyRuler.
+# Horizontal BendyRuler is the correct search mode for rover / boat motion.
+OA_TYPE 3
+OA_BR_TYPE 1
+OA_BR_LOOKAHEAD 5.0
+OA_MARGIN_MAX 1.5
+OA_OPTIONS 0
+OA_DB_SIZE 750
+OA_DB_EXPIRE 3
+OA_DB_QUEUE_SIZE 100
+OA_DB_OUTPUT 2
+OA_DB_BEAM_WIDTH 5
+OA_DB_RADIUS_MIN 0.35
+OA_DB_DIST_MAX 10
+OA_DB_ALT_MIN 0

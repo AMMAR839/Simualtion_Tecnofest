@@ -22,11 +22,11 @@ Visualization Manager:
       Color: 160; 160; 160
       Enabled: true
       Line Style:
-        Line Width: 0.03
+        Line Width: 0.02
         Value: Lines
       Name: Grid
       Plane: XY
-      Plane Cell Count: 60
+      Plane Cell Count: 36
       Reference Frame: odom
       Value: true
     - Class: rviz_default_plugins/TF
@@ -36,8 +36,8 @@ Visualization Manager:
         All Enabled: true
       Marker Scale: 0.6
       Name: TF
-      Show Arrows: true
-      Show Axes: true
+      Show Arrows: false
+      Show Axes: false
       Show Names: false
       Tree:
         {}
@@ -47,7 +47,7 @@ Visualization Manager:
       Angle Tolerance: 0.1
       Color: 255; 255; 255
       Enabled: true
-      Keep: 250
+      Keep: 120
       Name: ASV Odom Trail
       Position Tolerance: 0.1
       Shape: Arrow
@@ -76,7 +76,7 @@ Visualization Manager:
         Value: /asv/visualization/boat_model
       Value: true
     - Class: rviz_default_plugins/LaserScan
-      Alpha: 1
+      Alpha: 0.70
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
         Max Value: 10
@@ -90,14 +90,24 @@ Visualization Manager:
       Name: LiDAR
       Position Transformer: XYZ
       Selectable: true
-      Size (Pixels): 3
-      Size (m): 0.12
+      Size (Pixels): 2
+      Size (m): 0.06
       Style: Points
       Topic:
         Durability Policy: Volatile
         Reliability Policy: Best Effort
         Value: /asv/lidar/scan
       Use Fixed Frame: true
+      Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Name: LiDAR Rays
+      Namespaces:
+        lidar_rays: true
+      Topic:
+        Durability Policy: Volatile
+        Reliability Policy: Reliable
+        Value: /asv/visualization/lidar_rays
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
@@ -113,7 +123,7 @@ Visualization Manager:
       Class: rviz_default_plugins/Map
       Color Scheme: costmap
       Draw Behind: true
-      Enabled: true
+      Enabled: false
       Name: Global Costmap
       Topic:
         Durability Policy: Transient Local
@@ -124,11 +134,11 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /global_costmap/costmap_updates
       Use Timestamp: false
-      Value: true
-    - Alpha: 0.72
+      Value: false
+    - Alpha: 0.45
       Class: rviz_default_plugins/Map
       Color Scheme: costmap
-      Draw Behind: false
+      Draw Behind: true
       Enabled: true
       Name: Local Costmap
       Topic:
@@ -185,7 +195,7 @@ Visualization Manager:
   Global Options:
     Background Color: 30; 34; 38
     Fixed Frame: odom
-    Frame Rate: 30
+    Frame Rate: 10
   Name: root
   Tools:
     - Class: rviz_default_plugins/Interact

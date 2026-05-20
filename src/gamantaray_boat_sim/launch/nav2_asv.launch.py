@@ -50,6 +50,7 @@ def generate_launch_description():
         "planner_server",
         "behavior_server",
         "velocity_smoother",
+        "collision_monitor",
         "bt_navigator",
         "waypoint_follower",
     ]
@@ -99,8 +100,15 @@ def generate_launch_description():
                 log_level,
                 remappings=[
                     ("cmd_vel", "cmd_vel_nav"),
-                    ("cmd_vel_smoothed", "cmd_vel"),
+                    ("cmd_vel_smoothed", "cmd_vel_nav2_smoothed"),
                 ],
+            ),
+            nav2_node(
+                "nav2_collision_monitor",
+                "collision_monitor",
+                "collision_monitor",
+                params_file,
+                log_level,
             ),
             nav2_node(
                 "nav2_bt_navigator",

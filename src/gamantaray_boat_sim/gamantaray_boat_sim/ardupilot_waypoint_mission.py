@@ -17,7 +17,12 @@ from nav_msgs.msg import Odometry
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
-from std_msgs.msg import String
+from std_msgs.msg import Float64, String
+
+try:
+    from pymavlink import mavutil
+except ImportError:  # pragma: no cover - handled at runtime on target system.
+    mavutil = None
 
 
 EARTH_RADIUS_M = 6378137.0
@@ -37,7 +42,9 @@ class ArduPilotWaypointMission(Node):
         self.declare_parameter("origin_lon_deg", 106.816666)
         self.declare_parameter("origin_alt_m", 0.0)
         self.declare_parameter("mission_alt_m", 0.0)
+        self.declare_parameter("control_mode", "guided")
         self.declare_parameter("waypoint_radius_m", 5.50)
+        self.declare_parameter("final_waypoint_radius_m", 10.00)
         self.declare_parameter("waypoint_passed_margin_m", 2.00)
         self.declare_parameter("waypoint_passed_cross_track_m", 18.00)
         self.declare_parameter("waypoint_recede_skip_enabled", True)
@@ -50,6 +57,27 @@ class ArduPilotWaypointMission(Node):
         self.declare_parameter("set_current_index", 0)
         self.declare_parameter("mode_before_arm", "GUIDED")
         self.declare_parameter("mode_after_upload", "AUTO")
+        self.declare_parameter("guided_mode", "GUIDED")
+        self.declare_parameter(
+            "guided_mavlink_urls",
+            ["tcp:127.0.0.1:5762", "tcp:127.0.0.1:5763", "tcp:127.0.0.1:5760"],
+        )
+        self.declare_parameter("guided_mavlink_timeout_s", 8.0)
+        self.declare_parameter("guided_setpoint_rate_hz", 4.0)
+        self.declare_parameter("guided_use_lookahead_target", True)
+        self.declare_parameter("guided_lookahead_m", 9.0)
+        self.declare_parameter("guided_direct_thrust", True)
+        self.declare_parameter("direct_left_topic", "/asv/ardupilot/direct_left_thrust")
+        self.declare_parameter("direct_right_topic", "/asv/ardupilot/direct_right_thrust")
+        self.declare_parameter("direct_thrust_rate_hz", 20.0)
+        self.declare_parameter("direct_cruise_thrust_n", 145.0)
+        self.declare_parameter("direct_min_forward_thrust_n", 75.0)
+        self.declare_parameter("direct_max_forward_thrust_n", 160.0)
+        self.declare_parameter("direct_max_reverse_thrust_n", 12.0)
+        self.declare_parameter("direct_yaw_thrust_n_per_rad", 48.0)
+        self.declare_parameter("direct_max_turn_thrust_n", 70.0)
+        self.declare_parameter("direct_slowdown_radius_m", 9.0)
+        self.declare_parameter("direct_yaw_sign", 1.0)
         self.declare_parameter("arm_vehicle", True)
         self.declare_parameter("force_arm_if_needed", True)
         self.declare_parameter("rtl_on_finish", False)
@@ -77,6 +105,12 @@ class ArduPilotWaypointMission(Node):
         ).strip().rstrip("/")
         self.status_pub = self.create_publisher(
             String, "/asv/ardupilot/navigation/status", 10
+        )
+        self.direct_left_pub = self.create_publisher(
+            Float64, str(self.get_parameter("direct_left_topic").value), 20
+        )
+        self.direct_right_pub = self.create_publisher(
+            Float64, str(self.get_parameter("direct_right_topic").value), 20
         )
         qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
         self.create_subscription(State, f"{mavros_ns}/state", self.on_state, 10)
@@ -128,6 +162,7 @@ class ArduPilotWaypointMission(Node):
 
         self.state = None
         self.odom_xy = None
+        self.odom_yaw = 0.0
         self.start_xy = None
         self.local_waypoints = []
         self.active_index = 0
@@ -135,8 +170,23 @@ class ArduPilotWaypointMission(Node):
         self.mission_uploaded = False
         self.finish_reported = False
         self.last_status_time = 0.0
+        self.control_mode = (
+            str(self.get_parameter("control_mode").value).strip().lower()
+        )
+        self.guided_mavlink = None
+        self.guided_start_time = time.monotonic()
 
         self.monitor_timer = self.create_timer(0.25, self.monitor_progress)
+        guided_period = 1.0 / max(
+            1.0, float(self.get_parameter("guided_setpoint_rate_hz").value)
+        )
+        self.guided_timer = self.create_timer(guided_period, self.publish_guided_target)
+        direct_period = 1.0 / max(
+            1.0, float(self.get_parameter("direct_thrust_rate_hz").value)
+        )
+        self.direct_thrust_timer = self.create_timer(
+            direct_period, self.publish_direct_thrust
+        )
 
     def create_service_candidates(self, srv_type, service_names):
         clients = []
@@ -161,6 +211,7 @@ class ArduPilotWaypointMission(Node):
             float(msg.pose.pose.position.x),
             float(msg.pose.pose.position.y),
         )
+        self.odom_yaw = self.quaternion_to_yaw(msg.pose.pose.orientation)
 
     def on_waypoint_reached(self, msg):
         reached = int(msg.wp_seq)
@@ -177,7 +228,16 @@ class ArduPilotWaypointMission(Node):
             return
         if not self.wait_for_mavros():
             return
-        if not self.prepare_services():
+
+        if self.control_mode == "guided":
+            self.start_guided_mode()
+            return
+
+        if self.control_mode not in ("auto_mission", "auto"):
+            self.publish_status(f"ardupilot_unknown_control_mode:{self.control_mode}")
+            return
+
+        if not self.prepare_services(include_mission=True):
             return
 
         if bool(self.get_parameter("clear_existing_mission").value):
@@ -214,6 +274,33 @@ class ArduPilotWaypointMission(Node):
             f"ardupilot_mission_started:{len(mission)}:mode:{mode_after_upload or 'unchanged'}"
         )
 
+    def start_guided_mode(self):
+        if mavutil is None:
+            self.publish_status("ardupilot_guided_missing_pymavlink")
+            return
+        if not self.prepare_services(include_mission=False):
+            return
+        self.guided_mavlink = self.connect_guided_mavlink()
+        if self.guided_mavlink is None:
+            self.publish_status("ardupilot_guided_mavlink_unavailable")
+            return
+        self.active_index = 0
+        self.closest_distance_by_index.clear()
+        self.mission_uploaded = True
+
+        mode_before_arm = str(self.get_parameter("mode_before_arm").value).strip()
+        if mode_before_arm:
+            self.call_set_mode(mode_before_arm)
+
+        if bool(self.get_parameter("arm_vehicle").value):
+            self.call_arm(True)
+
+        guided_mode = str(self.get_parameter("guided_mode").value).strip() or "GUIDED"
+        self.call_set_mode(guided_mode)
+        self.publish_status(
+            f"ardupilot_guided_started:{len(self.local_waypoints)}:mode:{guided_mode}"
+        )
+
     def load_waypoints(self):
         waypoint_file = Path(str(self.get_parameter("waypoint_file").value))
         if not waypoint_file.exists():
@@ -229,11 +316,16 @@ class ArduPilotWaypointMission(Node):
 
         self.local_waypoints = []
         for item in data.get("waypoints", []):
+            x = float(item["x"])
+            y = float(item["y"])
+            lat, lon = self.enu_to_wgs84(x, y)
             self.local_waypoints.append(
                 {
                     "name": str(item.get("name", f"wp{len(self.local_waypoints) + 1}")),
-                    "x": float(item["x"]),
-                    "y": float(item["y"]),
+                    "x": x,
+                    "y": y,
+                    "lat": lat,
+                    "lon": lon,
                 }
             )
 
@@ -254,17 +346,18 @@ class ArduPilotWaypointMission(Node):
                 return False
         return False
 
-    def prepare_services(self):
-        clients = [
-            ("mission_clear", self.clear_client),
-            ("mission_push", self.push_client),
-            ("mission_set_current", self.set_current_client),
-        ]
+    def prepare_services(self, include_mission=True):
         timeout_s = float(self.get_parameter("service_timeout_s").value)
-        for name, client in clients:
-            if not client.wait_for_service(timeout_sec=timeout_s):
-                self.publish_status(f"ardupilot_service_unavailable:{name}")
-                return False
+        if include_mission:
+            clients = [
+                ("mission_clear", self.clear_client),
+                ("mission_push", self.push_client),
+                ("mission_set_current", self.set_current_client),
+            ]
+            for name, client in clients:
+                if not client.wait_for_service(timeout_sec=timeout_s):
+                    self.publish_status(f"ardupilot_service_unavailable:{name}")
+                    return False
         self.mode_client = self.select_first_available_service(
             "set_mode", self.mode_clients, timeout_s
         )
@@ -456,6 +549,136 @@ class ArduPilotWaypointMission(Node):
                 return False
         return future.done()
 
+    def connect_guided_mavlink(self):
+        urls = list(self.get_parameter("guided_mavlink_urls").value)
+        timeout_s = float(self.get_parameter("guided_mavlink_timeout_s").value)
+        for url in urls:
+            try:
+                connection = mavutil.mavlink_connection(
+                    url,
+                    source_system=255,
+                    source_component=191,
+                    autoreconnect=False,
+                )
+                connection.wait_heartbeat(timeout=timeout_s)
+                self.publish_status(f"ardupilot_guided_mavlink_connected:{url}")
+                return connection
+            except Exception as exc:  # noqa: BLE001 - try the next SITL port.
+                self.publish_status(f"ardupilot_guided_mavlink_failed:{url}:{exc}")
+        return None
+
+    def publish_guided_target(self):
+        if self.control_mode != "guided":
+            return
+        if not self.mission_uploaded or self.active_index >= len(self.local_waypoints):
+            return
+        if self.guided_mavlink is None:
+            return
+
+        target_x, target_y = self.guided_target_xy()
+        target_lat, target_lon = self.enu_to_wgs84(target_x, target_y)
+        ignore_mask = (
+            mavutil.mavlink.POSITION_TARGET_TYPEMASK_VX_IGNORE
+            | mavutil.mavlink.POSITION_TARGET_TYPEMASK_VY_IGNORE
+            | mavutil.mavlink.POSITION_TARGET_TYPEMASK_VZ_IGNORE
+            | mavutil.mavlink.POSITION_TARGET_TYPEMASK_AX_IGNORE
+            | mavutil.mavlink.POSITION_TARGET_TYPEMASK_AY_IGNORE
+            | mavutil.mavlink.POSITION_TARGET_TYPEMASK_AZ_IGNORE
+            | mavutil.mavlink.POSITION_TARGET_TYPEMASK_YAW_IGNORE
+            | mavutil.mavlink.POSITION_TARGET_TYPEMASK_YAW_RATE_IGNORE
+        )
+        time_boot_ms = int((time.monotonic() - self.guided_start_time) * 1000.0) & 0xFFFFFFFF
+        self.guided_mavlink.mav.set_position_target_global_int_send(
+            time_boot_ms,
+            self.guided_mavlink.target_system or 1,
+            self.guided_mavlink.target_component or 1,
+            mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT_INT,
+            ignore_mask,
+            int(target_lat * 1.0e7),
+            int(target_lon * 1.0e7),
+            float(self.get_parameter("mission_alt_m").value),
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+        )
+
+    def guided_target_xy(self):
+        target = self.local_waypoints[self.active_index]
+        target_xy = (float(target["x"]), float(target["y"]))
+        if (
+            not bool(self.get_parameter("guided_use_lookahead_target").value)
+            or self.active_index >= len(self.local_waypoints) - 1
+        ):
+            return target_xy
+
+        next_target = self.local_waypoints[self.active_index + 1]
+        vx = float(next_target["x"]) - target_xy[0]
+        vy = float(next_target["y"]) - target_xy[1]
+        seg_len = math.hypot(vx, vy)
+        if seg_len < 1.0e-6:
+            return target_xy
+
+        lookahead_m = max(0.0, float(self.get_parameter("guided_lookahead_m").value))
+        return (
+            target_xy[0] + lookahead_m * vx / seg_len,
+            target_xy[1] + lookahead_m * vy / seg_len,
+        )
+
+    def publish_direct_thrust(self):
+        if self.control_mode != "guided":
+            return
+        if not bool(self.get_parameter("guided_direct_thrust").value):
+            return
+        if not self.mission_uploaded or self.active_index >= len(self.local_waypoints):
+            self.publish_direct_pair(0.0, 0.0)
+            return
+        if self.odom_xy is None:
+            return
+
+        target_x, target_y = self.guided_target_xy()
+        dx = target_x - self.odom_xy[0]
+        dy = target_y - self.odom_xy[1]
+        distance = math.hypot(dx, dy)
+        if distance < 1.0e-6:
+            self.publish_direct_pair(0.0, 0.0)
+            return
+
+        desired_yaw = math.atan2(dy, dx)
+        yaw_error = self.angle_delta(desired_yaw, self.odom_yaw)
+        cruise = float(self.get_parameter("direct_cruise_thrust_n").value)
+        min_forward = float(self.get_parameter("direct_min_forward_thrust_n").value)
+        slowdown_radius = max(
+            0.1, float(self.get_parameter("direct_slowdown_radius_m").value)
+        )
+        throttle = cruise * min(1.0, max(0.35, distance / slowdown_radius))
+
+        abs_error = abs(yaw_error)
+        if abs_error > 1.35:
+            throttle = min(throttle, max(min_forward, cruise * 0.38))
+        elif abs_error > 0.75:
+            throttle = min(throttle, max(min_forward, cruise * 0.62))
+        else:
+            throttle = max(min_forward, throttle)
+
+        yaw_gain = float(self.get_parameter("direct_yaw_thrust_n_per_rad").value)
+        yaw_sign = float(self.get_parameter("direct_yaw_sign").value)
+        max_turn = abs(float(self.get_parameter("direct_max_turn_thrust_n").value))
+        turn = yaw_sign * self.clamp(yaw_gain * yaw_error, -max_turn, max_turn)
+        max_forward = abs(float(self.get_parameter("direct_max_forward_thrust_n").value))
+        max_reverse = abs(float(self.get_parameter("direct_max_reverse_thrust_n").value))
+        left = self.clamp(throttle - turn, -max_reverse, max_forward)
+        right = self.clamp(throttle + turn, -max_reverse, max_forward)
+        self.publish_direct_pair(left, right)
+
+    def publish_direct_pair(self, left, right):
+        self.direct_left_pub.publish(Float64(data=float(left)))
+        self.direct_right_pub.publish(Float64(data=float(right)))
+
     def monitor_progress(self):
         if not self.mission_uploaded or not self.local_waypoints:
             return
@@ -474,8 +697,34 @@ class ArduPilotWaypointMission(Node):
         if now - self.last_status_time >= float(
             self.get_parameter("status_period_s").value
         ):
-            name = self.local_waypoints[self.active_index]["name"]
-            self.publish_status(f"ardupilot_running:{self.active_index + 1}:{name}")
+            target = self.local_waypoints[self.active_index]
+            name = target["name"]
+            distance = math.hypot(
+                self.odom_xy[0] - target["x"],
+                self.odom_xy[1] - target["y"],
+            )
+            previous_xy = self.start_xy or self.odom_xy
+            if self.active_index > 0:
+                previous = self.local_waypoints[self.active_index - 1]
+                previous_xy = (previous["x"], previous["y"])
+            progress = self.segment_progress(
+                previous_xy, (target["x"], target["y"]), self.odom_xy
+            )
+            signed_progress = self.signed_segment_progress(
+                previous_xy, (target["x"], target["y"]), self.odom_xy
+            )
+            progress_text = ""
+            if progress is not None and signed_progress is not None:
+                along, cross, seg_len = progress
+                _, signed_cross, _ = signed_progress
+                progress_text = (
+                    f":along={along:.1f}/{seg_len:.1f}m"
+                    f":cross={cross:.1f}m:signed_cross={signed_cross:.1f}m"
+                )
+            self.publish_status(
+                f"ardupilot_running:{self.active_index + 1}:{name}:dist={distance:.1f}m"
+                f"{progress_text}"
+            )
             self.last_status_time = now
 
         if not bool(self.get_parameter("enable_passed_waypoint_skip").value):
@@ -485,7 +734,7 @@ class ArduPilotWaypointMission(Node):
             skipped = self.active_index
             self.active_index += 1
             self.closest_distance_by_index.pop(skipped, None)
-            if self.active_index < len(self.local_waypoints):
+            if self.active_index < len(self.local_waypoints) and self.control_mode != "guided":
                 self.call_set_current(self.active_index, wait=False)
             self.publish_status(f"ardupilot_waypoint_skip:{skipped}:{skip_reason}")
 
@@ -503,7 +752,10 @@ class ArduPilotWaypointMission(Node):
             self.closest_distance_by_index[self.active_index] = distance
             closest = distance
 
-        radius_m = float(self.get_parameter("waypoint_radius_m").value)
+        if self.active_index == len(self.local_waypoints) - 1:
+            radius_m = float(self.get_parameter("final_waypoint_radius_m").value)
+        else:
+            radius_m = float(self.get_parameter("waypoint_radius_m").value)
         if distance <= radius_m:
             return f"radius:{distance:.2f}m"
 
@@ -570,6 +822,40 @@ class ArduPilotWaypointMission(Node):
         cross = abs(wx * vy - wy * vx) / seg_len
         return along, cross, seg_len
 
+    @staticmethod
+    def signed_segment_progress(start_xy, target_xy, current_xy):
+        sx, sy = start_xy
+        tx, ty = target_xy
+        cx, cy = current_xy
+        vx = tx - sx
+        vy = ty - sy
+        wx = cx - sx
+        wy = cy - sy
+        seg_len = math.hypot(vx, vy)
+        if seg_len < 1.0e-6:
+            return None
+        along = (wx * vx + wy * vy) / seg_len
+        signed_cross = (wx * vy - wy * vx) / seg_len
+        return along, signed_cross, seg_len
+
+    @staticmethod
+    def quaternion_to_yaw(orientation):
+        x = float(orientation.x)
+        y = float(orientation.y)
+        z = float(orientation.z)
+        w = float(orientation.w)
+        siny_cosp = 2.0 * (w * z + x * y)
+        cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+        return math.atan2(siny_cosp, cosy_cosp)
+
+    @staticmethod
+    def angle_delta(target, current):
+        return math.atan2(math.sin(target - current), math.cos(target - current))
+
+    @staticmethod
+    def clamp(value, lower, upper):
+        return max(lower, min(upper, value))
+
 
 def main(args=None):
     rclpy.init(args=args)
@@ -580,6 +866,8 @@ def main(args=None):
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
+        if node.guided_mavlink is not None:
+            node.guided_mavlink.close()
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

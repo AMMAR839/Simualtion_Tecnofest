@@ -107,8 +107,12 @@
 
       <!-- ArduPilotPlugin subscribes to the Gazebo-scoped default IMU topic.
            Keep the /asv/imu/data sensor above for ROS, and use this one only
-           for the ArduPilot JSON sensor feedback loop. -->
+           for the ArduPilot JSON sensor feedback loop. The plugin assumes
+           IMU vectors already use aircraft body axes: x-forward, y-right,
+           z-down, so the sensor frame is rolled 180 deg from Gazebo's
+           x-forward, y-left, z-up link frame. -->
       <sensor name="ardupilot_imu_sensor" type="imu">
+        <pose>0 0 0 3.141593 0 0</pose>
         <always_on>true</always_on>
         <update_rate>100</update_rate>
       </sensor>
@@ -362,28 +366,30 @@
       <gazeboXYZToNED>0 0 0 3.141593 0 0</gazeboXYZToNED>
       <imuName>ardupilot_imu_sensor</imuName>
 
-      <!-- ArduRover skid-steer mapping. The physical propeller joints use
-           opposite signs, so the channels are crossed here to make ArduPilot's
-           steering correction match Gazebo yaw direction. -->
+      <!-- ArduRover skid-steer mapping.
+           SERVO1_FUNCTION=73 is left throttle and SERVO3_FUNCTION=74 is right
+           throttle. These controls publish raw thrust commands first; a ROS
+           adapter applies channel swap / scaling / clamping before forwarding
+           to the Gazebo Thruster plugin topics. -->
       <control channel="0">
-        <jointName>right_propeller_joint</jointName>
-        <useForce>1</useForce>
-        <multiplier>16000</multiplier>
-        <offset>-0.5</offset>
-        <servo_min>1000</servo_min>
-        <servo_max>2000</servo_max>
-        <type>COMMAND</type>
-        <cmd_topic>/model/gamantaray_boat/joint/right_propeller_joint/cmd_thrust</cmd_topic>
-      </control>
-      <control channel="2">
         <jointName>left_propeller_joint</jointName>
         <useForce>1</useForce>
-        <multiplier>-16000</multiplier>
+        <multiplier>320</multiplier>
         <offset>-0.5</offset>
         <servo_min>1000</servo_min>
         <servo_max>2000</servo_max>
         <type>COMMAND</type>
-        <cmd_topic>/model/gamantaray_boat/joint/left_propeller_joint/cmd_thrust</cmd_topic>
+        <cmd_topic>/asv/ardupilot/raw_left_thrust</cmd_topic>
+      </control>
+      <control channel="2">
+        <jointName>right_propeller_joint</jointName>
+        <useForce>1</useForce>
+        <multiplier>320</multiplier>
+        <offset>-0.5</offset>
+        <servo_min>1000</servo_min>
+        <servo_max>2000</servo_max>
+        <type>COMMAND</type>
+        <cmd_topic>/asv/ardupilot/raw_right_thrust</cmd_topic>
       </control>
     </plugin>
   </model>

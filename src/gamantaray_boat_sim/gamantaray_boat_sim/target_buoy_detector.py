@@ -42,6 +42,9 @@ class TargetBuoyDetector(Node):
             return
 
         target = str(self.get_parameter("target_color").value).lower()
+        if target not in ("red", "green", "black"):
+            self.publish_status(f"unsupported_color:{target}")
+            return
         min_pixels = int(self.get_parameter("min_pixels").value)
         count = 0
         sum_x = 0

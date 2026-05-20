@@ -11,14 +11,34 @@ ardupilot_waypoint_mission:
     origin_lon_deg: 106.816666
     origin_alt_m: 0.0
     mission_alt_m: 0.0
+    control_mode: "guided"
+    guided_mode: "GUIDED"
+    guided_mavlink_urls: ["tcp:127.0.0.1:5762", "tcp:127.0.0.1:5763", "tcp:127.0.0.1:5760"]
+    guided_mavlink_timeout_s: 8.0
+    guided_setpoint_rate_hz: 4.0
+    guided_use_lookahead_target: true
+    guided_lookahead_m: 9.0
+    guided_direct_thrust: true
+    direct_left_topic: "/asv/ardupilot/direct_left_thrust"
+    direct_right_topic: "/asv/ardupilot/direct_right_thrust"
+    direct_thrust_rate_hz: 20.0
+    direct_cruise_thrust_n: 145.0
+    direct_min_forward_thrust_n: 75.0
+    direct_max_forward_thrust_n: 160.0
+    direct_max_reverse_thrust_n: 12.0
+    direct_yaw_thrust_n_per_rad: 48.0
+    direct_max_turn_thrust_n: 70.0
+    direct_slowdown_radius_m: 9.0
+    direct_yaw_sign: 1.0
 
     # Larger ASV waypoint radius prevents turning back after the boat has
     # already passed a waypoint near the correct path.
-    waypoint_radius_m: 7.00
+    waypoint_radius_m: 8.00
+    final_waypoint_radius_m: 10.00
     waypoint_passed_margin_m: 2.00
     waypoint_passed_cross_track_m: 20.00
     waypoint_recede_skip_enabled: true
-    waypoint_recede_skip_radius_m: 14.00
+    waypoint_recede_skip_radius_m: 16.00
     waypoint_recede_skip_margin_m: 3.00
     final_waypoint_progress_fraction: 0.85
     enable_passed_waypoint_skip: true

@@ -70,6 +70,8 @@ setup(
     entry_points={
         'console_scripts': [
             'cmd_vel_to_thrusters = gamantaray_boat_sim.cmd_vel_to_thrusters:main',
+            'asv_nav2_safety_recovery = gamantaray_boat_sim.asv_nav2_safety_recovery:main',
+            'kamikaze_engagement = gamantaray_boat_sim.kamikaze_engagement:main',
             'odom_tf_broadcaster = gamantaray_boat_sim.odom_tf_broadcaster:main',
             'target_buoy_detector = gamantaray_boat_sim.target_buoy_detector:main',
             'nav2_waypoint_mission = gamantaray_boat_sim.nav2_waypoint_mission:main',
@@ -81,6 +83,8 @@ setup(
             'local_window_marker = gamantaray_boat_sim.local_window_marker:main',
             'anti_sink_guard = gamantaray_boat_sim.anti_sink_guard:main',
             'ardupilot_lidar_bridge = gamantaray_boat_sim.ardupilot_lidar_bridge:main',
+            'ardupilot_oa_param_setter = gamantaray_boat_sim.ardupilot_oa_param_setter:main',
+            'ardupilot_thrust_adapter = gamantaray_boat_sim.ardupilot_thrust_adapter:main',
             'ardupilot_waypoint_mission = gamantaray_boat_sim.ardupilot_waypoint_mission:main',
             'ardupilot_sitl_terminal = gamantaray_boat_sim.ardupilot_sitl_terminal:main',
         ],

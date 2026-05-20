@@ -6,6 +6,7 @@ from geometry_msgs.msg import Quaternion
 from nav_msgs.msg import Odometry
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from std_msgs.msg import String
 
 
 class AntiSinkGuard(Node):
@@ -14,6 +15,9 @@ class AntiSinkGuard(Node):
         self.odom_topic = self.declare_parameter("odom_topic", "/asv/odom").value
         self.service_name = self.declare_parameter(
             "set_pose_service", "/world/tecnofest_asv_course/set_pose"
+        ).value
+        self.status_topic = self.declare_parameter(
+            "status_topic", "/asv/safety/status"
         ).value
         self.entity_name = self.declare_parameter(
             "entity_name", "gamantaray_boat"
@@ -35,6 +39,7 @@ class AntiSinkGuard(Node):
             self.declare_parameter("service_timeout_s", 1.0).value
         )
         self.last_call_time = None
+        self.status_pub = self.create_publisher(String, self.status_topic, 10)
 
         self.create_subscription(Odometry, self.odom_topic, self.on_odom, 20)
 
@@ -73,11 +78,13 @@ class AntiSinkGuard(Node):
 
         self.last_call_time = self.get_clock().now()
         self.call_gz_set_pose(x, y, z, orientation)
-        self.get_logger().warn(
+        status = (
             f"Restoring {self.entity_name}: x={pose.position.x:.2f}, "
             f"y={pose.position.y:.2f}, z={pose.position.z:.2f}, "
             f"roll={roll:.2f}, pitch={pitch:.2f}, bad_position={bad_position}"
         )
+        self.status_pub.publish(String(data=f"safety_restore:{status}"))
+        self.get_logger().warn(status)
 
     def call_gz_set_pose(self, x, y, z, orientation):
         request = (

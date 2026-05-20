@@ -7,6 +7,8 @@
 FRAME_CLASS 2
 SERVO1_FUNCTION 73
 SERVO3_FUNCTION 74
+SERVO1_REVERSED 0
+SERVO3_REVERSED 0
 SERVO1_MIN 1000
 SERVO1_TRIM 1500
 SERVO1_MAX 2000
@@ -19,22 +21,24 @@ SERVO3_MAX 2000
 ARMING_CHECK 0
 BRD_SAFETYENABLE 0
 
-# Faster ASV defaults for the 100 x 20 m TEKNOFEST course. Keep the radius
-# wider than a land robot so the boat does not turn back after overshooting a
-# waypoint by a few meters.
-CRUISE_SPEED 3.0
-CRUISE_THROTTLE 78
-WP_SPEED 3.0
-WP_RADIUS 7.0
-WP_OVERSHOOT 6.0
-ATC_STR_RAT_FF 0.35
-ATC_STR_RAT_P 0.25
-ATC_STR_RAT_I 0.12
-ATC_STR_RAT_MAX 180
-ATC_TURN_MAX_G 0.9
+# ASV defaults for the 100 x 20 m TEKNOFEST course. The speed is kept moderate
+# because this Gazebo hull has inertia and water drag; too much throttle makes
+# ArduPilot overshoot WP4-WP5 and leave the narrow corridor.
+CRUISE_SPEED 2.2
+CRUISE_THROTTLE 68
+WP_SPEED 2.2
+WP_RADIUS 8.0
+WP_OVERSHOOT 8.0
+ATC_BRAKE 0
+ATC_STR_ACC_MAX 90
+ATC_STR_RAT_FF 0.25
+ATC_STR_RAT_P 0.22
+ATC_STR_RAT_I 0.08
+ATC_STR_RAT_MAX 95
+ATC_TURN_MAX_G 0.55
 TURN_RADIUS 0.6
-WP_PIVOT_ANGLE 45
-WP_PIVOT_RATE 100
+WP_PIVOT_ANGLE 0
+WP_PIVOT_RATE 45
 PILOT_STEER_TYPE 0
 
 # MAVLink proximity input from /asv/lidar/scan via MAVROS.
@@ -46,9 +50,11 @@ PRX1_ORIENT 0
 AVOID_ENABLE 7
 AVOID_MARGIN 1.5
 
-# Object avoidance path planner. OA_TYPE=3 enables Dijkstra + BendyRuler.
-# Horizontal BendyRuler is the correct search mode for rover / boat motion.
-OA_TYPE 3
+# Object avoidance path planner. OA_TYPE=3 enables Dijkstra + BendyRuler, but
+# it is enabled by ardupilot_waypoint_mission after EKF origin and proximity
+# data are alive. Enabling it at SITL boot can panic ArduRover while the
+# simulated location is still invalid.
+OA_TYPE 0
 OA_BR_TYPE 1
 OA_BR_LOOKAHEAD 5.0
 OA_MARGIN_MAX 1.5

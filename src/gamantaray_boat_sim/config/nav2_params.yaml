@@ -43,20 +43,20 @@ controller_server:
       min_vel_y: 0.0
       max_vel_x: 0.88
       max_vel_y: 0.0
-      max_vel_theta: 1.95
+      max_vel_theta: 2.35
       min_speed_xy: 0.03
       max_speed_xy: 0.88
       min_speed_theta: 0.0
       acc_lim_x: 0.48
       acc_lim_y: 0.0
-      acc_lim_theta: 3.00
+      acc_lim_theta: 4.20
       decel_lim_x: -0.60
       decel_lim_y: 0.0
-      decel_lim_theta: -2.80
+      decel_lim_theta: -4.20
       vx_samples: 10
       vy_samples: 1
-      vtheta_samples: 52
-      sim_time: 1.65
+      vtheta_samples: 68
+      sim_time: 1.45
       linear_granularity: 0.12
       angular_granularity: 0.05
       xy_goal_tolerance: 2.60
@@ -64,12 +64,12 @@ controller_server:
       short_circuit_trajectory_evaluation: true
       stateful: true
       critics: ["Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
-      BaseObstacle.scale: 1.30
+      BaseObstacle.scale: 1.80
       PathAlign.scale: 0.55
       PathAlign.forward_point_distance: 1.70
       GoalAlign.scale: 0.45
       GoalAlign.forward_point_distance: 1.70
-      PathDist.scale: 0.75
+      PathDist.scale: 0.60
       GoalDist.scale: 3.60
 
 local_costmap:
@@ -260,10 +260,10 @@ velocity_smoother:
     smoothing_frequency: 10.0
     scale_velocities: false
     feedback: "OPEN_LOOP"
-    max_velocity: [0.88, 0.0, 1.90]
-    min_velocity: [-0.08, 0.0, -1.90]
-    max_accel: [0.48, 0.0, 2.80]
-    max_decel: [-0.60, 0.0, -2.80]
+    max_velocity: [0.88, 0.0, 2.30]
+    min_velocity: [-0.12, 0.0, -2.30]
+    max_accel: [0.48, 0.0, 4.20]
+    max_decel: [-0.70, 0.0, -4.20]
     odom_topic: /asv/odom
     odom_duration: 0.2
     deadband_velocity: [0.02, 0.0, 0.02]
@@ -272,25 +272,35 @@ velocity_smoother:
 collision_monitor:
   ros__parameters:
     use_sim_time: true
+    enabled: true
     base_frame_id: "base_link"
     odom_frame_id: "odom"
-    cmd_vel_in_topic: "cmd_vel_smoothed"
-    cmd_vel_out_topic: "cmd_vel"
+    cmd_vel_in_topic: "cmd_vel_nav2_smoothed"
+    cmd_vel_out_topic: "cmd_vel_nav2_collision_checked"
     state_topic: "collision_monitor_state"
     transform_tolerance: 0.3
     source_timeout: 0.6
     base_shift_correction: true
     stop_pub_timeout: 2.0
-    polygons: ["FootprintApproach"]
-    FootprintApproach:
+    enable_stamped_cmd_vel: false
+    polygons: ["PolygonStop", "PolygonSlow"]
+    PolygonStop:
       type: "polygon"
-      action_type: "approach"
-      footprint_topic: "/local_costmap/published_footprint"
-      time_before_collision: 0.45
-      simulation_time_step: 0.1
-      min_points: 8
+      points: "[[1.45, 0.62], [1.45, -0.62], [0.38, -0.62], [0.38, 0.62]]"
+      action_type: "stop"
+      min_points: 3
       visualize: true
       enabled: true
+      polygon_pub_topic: "collision_stop_polygon"
+    PolygonSlow:
+      type: "polygon"
+      points: "[[2.85, 1.05], [2.85, -1.05], [0.32, -1.05], [0.32, 1.05]]"
+      action_type: "slowdown"
+      min_points: 3
+      slowdown_ratio: 0.32
+      visualize: true
+      enabled: true
+      polygon_pub_topic: "collision_slow_polygon"
     observation_sources: ["scan"]
     scan:
       type: "scan"

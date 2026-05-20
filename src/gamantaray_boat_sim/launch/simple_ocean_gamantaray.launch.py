@@ -31,6 +31,8 @@ BRIDGE_ARGUMENTS = [
     "/asv/camera/front/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo",
     "/asv/odom@nav_msgs/msg/Odometry[gz.msgs.Odometry",
     "/world/tecnofest_asv_course/set_pose@ros_gz_interfaces/srv/SetEntityPose",
+    "/asv/ardupilot/raw_left_thrust@std_msgs/msg/Float64[gz.msgs.Double",
+    "/asv/ardupilot/raw_right_thrust@std_msgs/msg/Float64[gz.msgs.Double",
     "/model/gamantaray_boat/joint/left_propeller_joint/cmd_thrust@std_msgs/msg/Float64]gz.msgs.Double",
     "/model/gamantaray_boat/joint/right_propeller_joint/cmd_thrust@std_msgs/msg/Float64]gz.msgs.Double",
 ]
@@ -69,7 +71,13 @@ def generate_launch_description():
     waypoint_file = LaunchConfiguration("waypoint_file")
     ardupilot_nav_file = LaunchConfiguration("ardupilot_nav_file")
     ardupilot_no_terminal = LaunchConfiguration("ardupilot_no_terminal")
+    ardupilot_control_mode = LaunchConfiguration("ardupilot_control_mode")
+    ardupilot_enable_oa = LaunchConfiguration("ardupilot_enable_oa")
+    ardupilot_swap_thrusters = LaunchConfiguration("ardupilot_swap_thrusters")
+    ardupilot_thrust_scale = LaunchConfiguration("ardupilot_thrust_scale")
     target_color = LaunchConfiguration("target_color")
+    enable_kamikaze = LaunchConfiguration("enable_kamikaze")
+    enable_nav2_recovery = LaunchConfiguration("enable_nav2_recovery")
 
     pkg_share = FindPackageShare("gamantaray_boat_sim")
 
@@ -104,6 +112,19 @@ def generate_launch_description():
     nav2_condition = IfCondition(
         PythonExpression(["'", navigation_mode, "' == 'nav2' and '", use_nav2, "' == 'true'"])
     )
+    kamikaze_condition = IfCondition(
+        PythonExpression(
+            [
+                "'",
+                navigation_mode,
+                "' == 'nav2' and '",
+                use_nav2,
+                "' == 'true' and '",
+                enable_kamikaze,
+                "' == 'true'",
+            ]
+        )
+    )
     ardupilot_condition = IfCondition(
         PythonExpression(["'", navigation_mode, "' == 'ardupilot'"])
     )
@@ -115,6 +136,11 @@ def generate_launch_description():
     ardupilot_no_terminal_condition = IfCondition(
         PythonExpression(
             ["'", navigation_mode, "' == 'ardupilot' and '", ardupilot_no_terminal, "' == 'true'"]
+        )
+    )
+    ardupilot_oa_condition = IfCondition(
+        PythonExpression(
+            ["'", navigation_mode, "' == 'ardupilot' and '", ardupilot_enable_oa, "' == 'true'"]
         )
     )
     non_ardupilot_condition = IfCondition(
@@ -161,10 +187,16 @@ def generate_launch_description():
             DeclareLaunchArgument("show_lidar_rays", default_value="false"),
             DeclareLaunchArgument("navigation_mode", default_value="nav2"),
             DeclareLaunchArgument("target_color", default_value="green"),
+            DeclareLaunchArgument("enable_kamikaze", default_value="true"),
+            DeclareLaunchArgument("enable_nav2_recovery", default_value="true"),
             DeclareLaunchArgument("world", default_value=default_world),
             DeclareLaunchArgument("waypoint_file", default_value=default_waypoints),
             DeclareLaunchArgument("ardupilot_nav_file", default_value=default_ardupilot_nav),
             DeclareLaunchArgument("ardupilot_no_terminal", default_value="false"),
+            DeclareLaunchArgument("ardupilot_control_mode", default_value="guided"),
+            DeclareLaunchArgument("ardupilot_enable_oa", default_value="false"),
+            DeclareLaunchArgument("ardupilot_swap_thrusters", default_value="true"),
+            DeclareLaunchArgument("ardupilot_thrust_scale", default_value="1.0"),
             SetEnvironmentVariable(
                 name="GZ_SIM_RESOURCE_PATH",
                 value=joined_path(resource_paths),
@@ -299,20 +331,83 @@ def generate_launch_description():
                 parameters=[
                     {
                         "use_sim_time": use_sim_time,
+                        "cmd_vel_topic": "/cmd_vel",
+                        "nav_cmd_vel_topic": "/cmd_vel_disabled",
                         "max_forward_thrust_n": 58.0,
-                        "max_reverse_thrust_n": 20.0,
+                        "max_reverse_thrust_n": 28.0,
                         "max_speed_cmd_mps": 0.92,
-                        "yaw_to_thrust_n_per_radps": 112.0,
+                        "yaw_to_thrust_n_per_radps": 152.0,
                         "yaw_sign": 1.0,
-                        "yaw_rate_feedback_gain": 0.10,
-                        "max_yaw_rate_cmd_radps": 1.90,
+                        "yaw_rate_feedback_gain": 0.06,
+                        "max_yaw_rate_cmd_radps": 2.35,
                         "cmd_timeout_s": 0.8,
-                        "thrust_slew_rate_nps": 82.0,
-                        "turn_throttle_reduction": 0.10,
-                        "min_turn_throttle_fraction": 0.82,
+                        "thrust_slew_rate_nps": 125.0,
+                        "turn_throttle_reduction": 0.28,
+                        "min_turn_throttle_fraction": 0.55,
                         "speed_feedback_gain_n_per_mps": 0.0,
                         "speed_feedforward_fraction": 1.0,
                         "odom_timeout_s": 0.7,
+                    }
+                ],
+            ),
+            Node(
+                package="gamantaray_boat_sim",
+                executable="asv_nav2_safety_recovery",
+                name="asv_nav2_safety_recovery",
+                output="screen",
+                condition=nav2_condition,
+                parameters=[
+                    {
+                        "use_sim_time": use_sim_time,
+                        "nav_cmd_topic": "/cmd_vel_nav2_collision_checked",
+                        "forward_intent_topic": "/cmd_vel_nav2_smoothed",
+                        "kamikaze_cmd_topic": "/asv/kamikaze/cmd_vel",
+                        "output_cmd_topic": "/cmd_vel",
+                        "scan_topic": "/asv/lidar/scan",
+                        "nav_status_topic": "/asv/navigation/status",
+                        "status_topic": "/asv/recovery/status",
+                        "recovery_enabled": enable_nav2_recovery,
+                        "kamikaze_enabled": enable_kamikaze,
+                        "danger_distance_m": 1.85,
+                        "front_half_angle_deg": 28.0,
+                        "min_valid_range_m": 0.75,
+                        "min_cluster_points": 3,
+                        "front_obstacle_memory_s": 1.50,
+                        "stop_duration_s": 0.40,
+                        "backup_duration_s": 1.05,
+                        "turn_duration_s": 1.25,
+                        "cooldown_duration_s": 0.60,
+                        "backup_speed_mps": -0.22,
+                        "turn_speed_radps": 1.05,
+                        "publish_rate_hz": 20.0,
+                    }
+                ],
+            ),
+            Node(
+                package="gamantaray_boat_sim",
+                executable="ardupilot_thrust_adapter",
+                name="ardupilot_thrust_adapter",
+                output="screen",
+                condition=ardupilot_condition,
+                parameters=[
+                    {
+                        "use_sim_time": use_sim_time,
+                        "raw_left_topic": "/asv/ardupilot/raw_left_thrust",
+                        "raw_right_topic": "/asv/ardupilot/raw_right_thrust",
+                        "direct_left_topic": "/asv/ardupilot/direct_left_thrust",
+                        "direct_right_topic": "/asv/ardupilot/direct_right_thrust",
+                        "left_output_topic": "/model/gamantaray_boat/joint/left_propeller_joint/cmd_thrust",
+                        "right_output_topic": "/model/gamantaray_boat/joint/right_propeller_joint/cmd_thrust",
+                        "swap_channels": ardupilot_swap_thrusters,
+                        "thrust_scale": ardupilot_thrust_scale,
+                        "deadband_n": 3.0,
+                        "max_forward_thrust_n": 190.0,
+                        "max_reverse_thrust_n": 30.0,
+                        "opposed_reverse_scale": 0.0,
+                        "direct_cmd_timeout_s": 0.35,
+                        "slew_rate_nps": 260.0,
+                        "cmd_timeout_s": 0.75,
+                        "publish_rate_hz": 30.0,
                     }
                 ],
             ),
@@ -369,6 +464,7 @@ def generate_launch_description():
                         "use_sim_time": use_sim_time,
                         "odom_topic": "/asv/odom",
                         "set_pose_service": "/world/tecnofest_asv_course/set_pose",
+                        "status_topic": "/asv/ardupilot/navigation/status",
                         "entity_name": "gamantaray_boat",
                         "min_z": -0.90,
                         "restore_z": 0.30,
@@ -390,6 +486,49 @@ def generate_launch_description():
                     {
                         "use_sim_time": use_sim_time,
                         "target_color": target_color,
+                    }
+                ],
+            ),
+            Node(
+                package="gamantaray_boat_sim",
+                executable="kamikaze_engagement",
+                name="kamikaze_engagement",
+                output="screen",
+                condition=kamikaze_condition,
+                parameters=[
+                    {
+                        "use_sim_time": use_sim_time,
+                        "target_color": target_color,
+                        "autostart": False,
+                        "nav_status_topic": "/asv/navigation/status",
+                        "target_topic": "/asv/perception/target_selection",
+                        "scan_topic": "/asv/lidar/scan",
+                        "odom_topic": "/asv/odom",
+                        "cmd_topic": "/asv/kamikaze/cmd_vel",
+                        "status_topic": "/asv/kamikaze/status",
+                        "visible_timeout_s": 0.70,
+                        "align_gain": 0.85,
+                        "max_turn_radps": 0.75,
+                        "center_tolerance": 0.18,
+                        "align_forward_speed": 0.12,
+                        "attack_forward_speed": 0.42,
+                        "sweep_turn_speed": 0.18,
+                        "coarse_homing_enabled": True,
+                        "coarse_forward_speed": 0.28,
+                        "coarse_turn_gain": 0.95,
+                        "coarse_max_turn_radps": 0.58,
+                        "coarse_heading_tolerance_rad": 0.22,
+                        "red_target_x": 46.0,
+                        "red_target_y": 6.6,
+                        "green_target_x": 46.0,
+                        "green_target_y": 1.8,
+                        "black_target_x": 46.0,
+                        "black_target_y": -3.0,
+                        "contact_distance_m": 0.45,
+                        "contact_half_angle_deg": 12.0,
+                        "min_contact_points": 3,
+                        "push_after_contact_s": 1.20,
+                        "publish_rate_hz": 20.0,
                     }
                 ],
             ),
@@ -596,8 +735,8 @@ def generate_launch_description():
             ),
             TimerAction(
                 # Start proximity after ArduRover has had time to set EKF origin.
-                # Sending OA/proximity data too early can make ArduPilot query an
-                # invalid (0, 0, 0) Location while OA_TYPE=3 is active.
+                # The ArduPilot param file keeps OA_TYPE=0 for stable waypoint
+                # validation; proximity is still bridged for future OA tuning.
                 period=32.0,
                 actions=[
                     Node(
@@ -623,6 +762,41 @@ def generate_launch_description():
                 ],
             ),
             TimerAction(
+                # Enable Dijkstra+BendyRuler only after SITL and LiDAR are alive.
+                # This avoids the ArduRover invalid-location panic seen when
+                # OA_TYPE=3 is loaded before EKF origin is valid.
+                period=58.0,
+                actions=[
+                    Node(
+                        package="gamantaray_boat_sim",
+                        executable="ardupilot_oa_param_setter",
+                        name="ardupilot_oa_param_setter",
+                        output="screen",
+                        condition=ardupilot_oa_condition,
+                        parameters=[
+                            {
+                                "use_sim_time": use_sim_time,
+                                "enabled": ardupilot_enable_oa,
+                                "scan_topic": "/asv/lidar/scan",
+                                "start_delay_s": 1.0,
+                                "require_scan": True,
+                                "mavlink_urls": [
+                                    "tcp:127.0.0.1:5762",
+                                    "tcp:127.0.0.1:5763",
+                                    "tcp:127.0.0.1:5760",
+                                ],
+                                "OA_TYPE": 3.0,
+                                "OA_BR_TYPE": 1.0,
+                                "OA_BR_LOOKAHEAD": 5.0,
+                                "OA_MARGIN_MAX": 1.5,
+                                "AVOID_ENABLE": 7.0,
+                                "AVOID_MARGIN": 1.5,
+                            }
+                        ],
+                    ),
+                ],
+            ),
+            TimerAction(
                 # MAVROS mission services appear after heartbeat/version/home
                 # setup. Delay mission upload so AUTO/arming is not attempted
                 # while the waypoint plugin is still initializing.
@@ -639,6 +813,7 @@ def generate_launch_description():
                             {
                                 "use_sim_time": use_sim_time,
                                 "waypoint_file": waypoint_file,
+                                "control_mode": ardupilot_control_mode,
                             },
                         ],
                     )

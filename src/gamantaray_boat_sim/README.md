@@ -31,10 +31,20 @@ Warna air berasal dari shader lokal
 shader dikurangi dan fallback material biru ditambahkan di `model.sdf` supaya
 water surface tidak tampil putih ketika dilihat di Gazebo. Model wave memakai
 `tile_size` `104 26`, mengikuti area course yang dibuat mepet dengan objek
-lintasan. Parameter wave sengaja dibuat halus (`cell_count` 96, update 18 Hz)
+lintasan. Parameter wave sengaja dibuat halus (`cell_count` 48, update 10 Hz)
 agar physics kapal, costmap, dan RViz tidak terlalu berat.
 
 ## Build
+
+Local costmap Nav2 memakai STVL. Install dependency ini sekali sebelum launch
+Nav2:
+
+```bash
+sudo apt install ros-jazzy-spatio-temporal-voxel-layer
+```
+
+Jika package itu belum ada, build workspace tetap bisa selesai, tetapi Nav2
+akan gagal memuat plugin local costmap saat launch.
 
 ```bash
 cd /home/ammar/Documents/ws_tecnofest
@@ -74,8 +84,9 @@ ArduRover SITL. Jika terminal GUI tidak tersedia, output SITL akan fallback ke
 terminal launch utama.
 
 RViz akan terbuka otomatis untuk menampilkan `/plan`, local costmap, TF, odometry,
-LiDAR, marker obstacle LiDAR, dan marker model kapal. Marker kapal di RViz
-memakai proxy ringan agar RViz tetap responsif; mesh `.obj` asli kapal tetap
+marker obstacle LiDAR, dan satu marker kotak sederhana untuk kapal. LiDAR ray
+tidak ditampilkan default supaya RViz lebih ringan; aktifkan dengan
+`show_lidar_rays:=true` hanya untuk debug. Mesh `.obj` asli kapal tetap
 ditampilkan di Gazebo. View RViz memakai target frame `base_link`, jadi kamera
 RViz mengikuti pergerakan kapal. Launch juga memakai GUI config Gazebo khusus
 agar panel/tab Gazebo disembunyikan dan jendela Gazebo/RViz dibuka dengan
@@ -159,7 +170,8 @@ Sensor dan navigasi:
 - `/asv/gps/fix`
 - `/asv/lidar/scan_raw`
 - `/asv/lidar/scan`
-- `/asv/visualization/lidar_rays`
+- `/asv/lidar/points_filtered`
+- `/asv/visualization/lidar_rays` (debug opsional, default tidak diluncurkan)
 - `/asv/camera/front/image`
 - `/asv/camera/front/camera_info`
 - `/asv/perception/target_selection`
@@ -179,10 +191,11 @@ Launch juga menerbitkan alias TF `lidar_link` dan `front_camera_link` dari
 `base_link` untuk kompatibilitas.
 
 `/asv/lidar/scan_raw` adalah output langsung Gazebo. `/asv/lidar/scan` adalah
-hasil filter footprint kapal sendiri dan dipakai oleh Nav2, RViz obstacle
-marker, serta bridge ArduPilot. Path biru `/plan` adalah referensi global
-menuju waypoint; obstacle avoidance buoy dilakukan oleh local costmap dan DWB
-controller dari data LiDAR 2D.
+hasil filter footprint kapal sendiri. Untuk Nav2, scan ini dikonversi menjadi
+`/asv/lidar/points_filtered` dan masuk ke STVL local costmap, sehingga noise
+ombak bisa hilang otomatis melalui `voxel_decay`. Path biru `/plan` adalah
+referensi global menuju waypoint; obstacle avoidance buoy dilakukan oleh local
+costmap dan DWB controller.
 
 ## Mode ArduPilot
 

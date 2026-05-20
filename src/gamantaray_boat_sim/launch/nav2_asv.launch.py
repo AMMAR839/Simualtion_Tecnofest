@@ -1,19 +1,31 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node, SetParameter
+from launch_ros.substitutions import FindPackageShare
 
 
-def nav2_node(package, executable, name, params_file, log_level, remappings=None):
+def nav2_node(
+    package,
+    executable,
+    name,
+    params_file,
+    log_level,
+    remappings=None,
+    extra_parameters=None,
+):
     node_remappings = [("/tf", "tf"), ("/tf_static", "tf_static")]
     if remappings:
         node_remappings.extend(remappings)
+    parameters = [params_file]
+    if extra_parameters:
+        parameters.extend(extra_parameters)
     return Node(
         package=package,
         executable=executable,
         name=name,
         output="screen",
-        parameters=[params_file],
+        parameters=parameters,
         arguments=["--ros-args", "--log-level", log_level],
         remappings=node_remappings,
     )
@@ -24,6 +36,13 @@ def generate_launch_description():
     params_file = LaunchConfiguration("params_file")
     autostart = LaunchConfiguration("autostart")
     log_level = LaunchConfiguration("log_level")
+    asv_bt_xml = PathJoinSubstitution(
+        [
+            FindPackageShare("gamantaray_nav2_bt_plugins"),
+            "behavior_trees",
+            "asv_navigate_to_pose.xml",
+        ]
+    )
 
     lifecycle_nodes = [
         "controller_server",
@@ -89,6 +108,11 @@ def generate_launch_description():
                 "bt_navigator",
                 params_file,
                 log_level,
+                extra_parameters=[
+                    {
+                        "default_nav_to_pose_bt_xml": asv_bt_xml,
+                    }
+                ],
             ),
             nav2_node(
                 "nav2_waypoint_follower",

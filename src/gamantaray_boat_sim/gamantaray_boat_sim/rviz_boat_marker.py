@@ -28,6 +28,9 @@ class RvizBoatMarker(Node):
     def __init__(self):
         super().__init__("rviz_boat_marker")
         self.use_heavy_mesh = self.declare_parameter("use_heavy_mesh", False).value
+        self.detail_level = str(
+            self.declare_parameter("detail_level", "simple").value
+        ).lower()
         self.odom_topic = self.declare_parameter("odom_topic", "/asv/odom").value
         self.fixed_frame = self.declare_parameter("fixed_frame", "odom").value
         self.publish_in_fixed_frame = self.declare_parameter(
@@ -61,40 +64,8 @@ class RvizBoatMarker(Node):
         else:
             markers.extend(self.proxy_hull_markers(stamp))
 
-        markers.extend([
-            self.cylinder_marker(
-                10, stamp, "left_thruster", -0.85, 0.45, -0.2, 0.16, 0.16, 0.25,
-                0.02, 0.02, 0.02, 1.0, 0.0, 1.5708, 0.0,
-            ),
-            self.cylinder_marker(
-                11, stamp, "right_thruster", -0.85, -0.45, -0.2, 0.16, 0.16, 0.25,
-                0.02, 0.02, 0.02, 1.0, 0.0, 1.5708, 0.0,
-            ),
-            self.cylinder_marker(
-                12, stamp, "left_propeller", -0.95, 0.45, -0.05, 0.15, 0.15, 0.025,
-                0.05, 0.05, 0.05, 1.0, 0.0, 1.570796, 0.0,
-            ),
-            self.cylinder_marker(
-                13, stamp, "right_propeller", -0.95, -0.45, -0.05, 0.15, 0.15, 0.025,
-                0.05, 0.05, 0.05, 1.0, 0.0, 1.570796, 0.0,
-            ),
-            self.cylinder_marker(
-                14, stamp, "lidar_mast", 0.52, 0.0, 0.78, 0.05, 0.05, 1.42,
-                0.65, 0.65, 0.65, 1.0,
-            ),
-            self.box_marker(
-                15, stamp, "sensor_crossbar", 0.52, 0.0, 0.98, 0.16, 0.40, 0.05,
-                0.72, 0.72, 0.72, 1.0,
-            ),
-            self.cylinder_marker(
-                16, stamp, "lidar_sensor", 0.55, 0.0, 0.95, 0.16, 0.16, 0.05,
-                0.05, 0.05, 0.05, 1.0,
-            ),
-            self.box_marker(
-                17, stamp, "front_camera", 0.85, 0.0, 1.25, 0.14, 0.18, 0.10,
-                0.03, 0.03, 0.03, 1.0,
-            ),
-        ])
+        if self.detail_level == "full":
+            markers.extend(self.detail_markers(stamp))
         self.publisher.publish(MarkerArray(markers=markers))
 
     def base_marker(self, marker_id, stamp, marker_type, ns):
@@ -126,6 +97,13 @@ class RvizBoatMarker(Node):
         return marker
 
     def proxy_hull_markers(self, stamp):
+        if self.detail_level == "simple":
+            return [
+                self.box_marker(
+                    0, stamp, "hull_deck", 0.05, 0.0, 0.08, 2.15, 1.05, 0.32,
+                    0.82, 0.88, 0.92, 1.0,
+                ),
+            ]
         return [
             self.box_marker(
                 0, stamp, "hull", 0.0, 0.0, -0.02, 2.35, 1.20, 0.34,
@@ -138,6 +116,42 @@ class RvizBoatMarker(Node):
             self.box_marker(
                 2, stamp, "bow_direction", 0.95, 0.0, 0.30, 0.35, 0.18, 0.08,
                 0.10, 0.45, 1.00, 1.0,
+            ),
+        ]
+
+    def detail_markers(self, stamp):
+        return [
+            self.cylinder_marker(
+                10, stamp, "left_thruster", -0.85, 0.45, -0.2, 0.16, 0.16, 0.25,
+                0.02, 0.02, 0.02, 1.0, 0.0, 1.5708, 0.0,
+            ),
+            self.cylinder_marker(
+                11, stamp, "right_thruster", -0.85, -0.45, -0.2, 0.16, 0.16, 0.25,
+                0.02, 0.02, 0.02, 1.0, 0.0, 1.5708, 0.0,
+            ),
+            self.cylinder_marker(
+                12, stamp, "left_propeller", -0.95, 0.45, -0.05, 0.15, 0.15, 0.025,
+                0.05, 0.05, 0.05, 1.0, 0.0, 1.570796, 0.0,
+            ),
+            self.cylinder_marker(
+                13, stamp, "right_propeller", -0.95, -0.45, -0.05, 0.15, 0.15, 0.025,
+                0.05, 0.05, 0.05, 1.0, 0.0, 1.570796, 0.0,
+            ),
+            self.cylinder_marker(
+                14, stamp, "lidar_mast", 0.52, 0.0, 0.78, 0.05, 0.05, 1.42,
+                0.65, 0.65, 0.65, 1.0,
+            ),
+            self.box_marker(
+                15, stamp, "sensor_crossbar", 0.52, 0.0, 0.98, 0.16, 0.40, 0.05,
+                0.72, 0.72, 0.72, 1.0,
+            ),
+            self.cylinder_marker(
+                16, stamp, "lidar_sensor", 0.55, 0.0, 0.95, 0.16, 0.16, 0.05,
+                0.05, 0.05, 0.05, 1.0,
+            ),
+            self.box_marker(
+                17, stamp, "front_camera", 0.85, 0.0, 1.25, 0.14, 0.18, 0.10,
+                0.03, 0.03, 0.03, 1.0,
             ),
         ]
 

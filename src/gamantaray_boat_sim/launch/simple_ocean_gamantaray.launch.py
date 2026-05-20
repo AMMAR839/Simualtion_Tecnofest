@@ -62,6 +62,7 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration("use_sim_time")
     use_nav2 = LaunchConfiguration("use_nav2")
     use_rviz = LaunchConfiguration("use_rviz")
+    show_lidar_rays = LaunchConfiguration("show_lidar_rays")
     navigation_mode = LaunchConfiguration("navigation_mode")
     world = LaunchConfiguration("world")
     waypoint_file = LaunchConfiguration("waypoint_file")
@@ -124,6 +125,7 @@ def generate_launch_description():
             DeclareLaunchArgument("use_sim_time", default_value="true"),
             DeclareLaunchArgument("use_nav2", default_value="true"),
             DeclareLaunchArgument("use_rviz", default_value="true"),
+            DeclareLaunchArgument("show_lidar_rays", default_value="false"),
             DeclareLaunchArgument("navigation_mode", default_value="nav2"),
             DeclareLaunchArgument("target_color", default_value="green"),
             DeclareLaunchArgument("world", default_value=default_world),
@@ -285,11 +287,25 @@ def generate_launch_description():
                         "sensor_y": 0.0,
                         "keep_angle_min": -2.05,
                         "keep_angle_max": 2.05,
-                        "cluster_gap_m": 0.30,
+                        "cluster_gap_m": 0.24,
                         "min_cluster_points": 4,
-                        "min_cluster_width_m": 0.20,
-                        "max_cluster_width_m": 0.95,
-                        "max_cluster_points": 55,
+                        "min_cluster_width_m": 0.12,
+                        "max_cluster_width_m": 0.85,
+                        "max_cluster_points": 70,
+                    }
+                ],
+            ),
+            Node(
+                package="gamantaray_boat_sim",
+                executable="lidar_scan_to_pointcloud",
+                name="lidar_scan_to_pointcloud",
+                output="screen",
+                parameters=[
+                    {
+                        "use_sim_time": use_sim_time,
+                        "scan_topic": "/asv/lidar/scan",
+                        "cloud_topic": "/asv/lidar/points_filtered",
+                        "range_cutoff": 10.0,
                     }
                 ],
             ),
@@ -337,6 +353,7 @@ def generate_launch_description():
                     {
                         "use_sim_time": use_sim_time,
                         "use_heavy_mesh": False,
+                        "detail_level": "simple",
                         "odom_topic": "/asv/odom",
                         "fixed_frame": "odom",
                         "publish_in_fixed_frame": False,
@@ -348,7 +365,7 @@ def generate_launch_description():
                 executable="lidar_ray_marker",
                 name="lidar_ray_marker",
                 output="screen",
-                condition=IfCondition(use_rviz),
+                condition=IfCondition(show_lidar_rays),
                 parameters=[
                     {
                         "use_sim_time": use_sim_time,

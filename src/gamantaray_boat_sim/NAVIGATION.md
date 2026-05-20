@@ -34,8 +34,10 @@ Obstacle avoidance:
 /asv/lidar/scan_raw
         -> lidar_scan_filter.py
         -> /asv/lidar/scan
-        -> local_costmap
-        -> obstacle layer menandai buoy/halangan
+        -> lidar_scan_to_pointcloud.py
+        -> /asv/lidar/points_filtered
+        -> local_costmap STVL layer
+        -> voxel decay menghapus noise ombak sementara
         -> controller memilih belokan lokal yang tidak menabrak
 ```
 
@@ -203,20 +205,25 @@ Bagian LiDAR masuk costmap:
 local_costmap:
   local_costmap:
     ros__parameters:
-      plugins: ["obstacle_layer", "inflation_layer"]
-      obstacle_layer:
-        observation_sources: scan
-        scan:
-          topic: /asv/lidar/scan
-          obstacle_max_range: 8.0
-          raytrace_max_range: 12.0
+      plugins: ["stvl_layer", "inflation_layer"]
+      stvl_layer:
+        plugin: "spatio_temporal_voxel_layer/SpatioTemporalVoxelLayer"
+        voxel_decay: 3.0
+        observation_sources: points
+        points:
+          topic: /asv/lidar/points_filtered
+          data_type: PointCloud2
+          obstacle_range: 8.5
+          clear_after_reading: true
 ```
 
 Parameter penting:
 
-- `obstacle_max_range`: jarak maksimum obstacle dari LiDAR yang dimasukkan ke
+- `voxel_decay`: umur maksimum voxel sebelum hilang otomatis. Ini dipakai
+  untuk pantulan/noise ombak yang hanya muncul sebentar.
+- `voxel_min_points`: jumlah titik minimal agar cluster dianggap valid.
+- `obstacle_range`: jarak maksimum obstacle dari LiDAR yang masuk local
   costmap.
-- `raytrace_max_range`: jarak clearing ray untuk membersihkan obstacle lama.
 - `inflation_radius`: jarak aman tambahan di sekitar obstacle.
 - `cost_scaling_factor`: seberapa cepat cost turun saat menjauh dari obstacle.
 - `footprint` dan `footprint_padding`: bentuk aman kapal untuk costmap.
@@ -229,7 +236,7 @@ dan membuat visual path lebih mudah dibaca.
 Jika kapal terlalu dekat dengan buoy:
 
 - Naikkan `inflation_radius`.
-- Naikkan `inflation_radius` sedikit.
+- Turunkan `cost_scaling_factor` sedikit agar zona bahaya lebih tebal.
 - Turunkan `max_velocity[0]`.
 
 Jika kapal terlalu takut dan jalur terlalu jauh:
@@ -247,17 +254,17 @@ Bagian DWB controller:
 
 ```yaml
 FollowPath:
-  max_vel_x: 0.48
-  max_vel_theta: 0.92
-  BaseObstacle.scale: 0.10
-  PathAlign.scale: 11.0
+  max_vel_x: 0.36
+  max_vel_theta: 1.25
+  BaseObstacle.scale: 0.12
+  PathAlign.scale: 5.0
 ```
 
 Bagian velocity smoother:
 
 ```yaml
-max_velocity: [0.48, 0.0, 0.85]
-max_accel: [0.22, 0.0, 0.95]
+max_velocity: [0.36, 0.0, 1.15]
+max_accel: [0.16, 0.0, 1.45]
 ```
 
 Mapping `/cmd_vel` ke thruster ada di `cmd_vel_to_thrusters.py`.
@@ -298,11 +305,13 @@ Yang perlu dilihat di RViz:
 - `/local_costmap/costmap`: costmap lokal di sekitar kapal.
 - `/global_costmap/costmap`: opsional untuk debug; default RViz dibuat tidak
   aktif agar tampilan lebih ringan.
-- `/asv/lidar/scan`: titik LiDAR untuk obstacle.
-- `/asv/visualization/lidar_rays`: garis beam/ray LiDAR.
+- `/asv/lidar/scan`: titik LiDAR untuk debug; default RViz dimatikan agar
+  costmap lebih jelas.
+- `/asv/lidar/points_filtered`: PointCloud2 hasil konversi untuk STVL.
+- `/local_costmap/voxel_grid`: voxel STVL jika `publish_voxel_map` aktif.
 - `/asv/perception/lidar_obstacles`: marker kuning obstacle hasil clustering LiDAR.
 - `/asv/odom`: jejak odometry kapal.
-- `/asv/visualization/boat_model`: proxy visual kapal yang ringan.
+- `/asv/visualization/boat_model`: satu marker kotak sederhana untuk kapal.
 
 Catatan penting: mesh asli kapal `assembly_2_0.obj` berukuran sangat besar
 karena berasal dari file `assembly_2_0.obj.gz`. Gazebo tetap memakai mesh asli
@@ -323,6 +332,7 @@ ros2 launch gamantaray_boat_sim simple_ocean_gamantaray.launch.py use_rviz:=fals
 ```bash
 ros2 topic hz /asv/odom
 ros2 topic hz /asv/lidar/scan
+ros2 topic hz /asv/lidar/points_filtered
 ros2 run tf2_ros tf2_echo odom base_link
 ```
 
@@ -388,9 +398,16 @@ mode GPS realistis seperti tutorial Nav2 GPS, tambahkan `robot_localization`
 dan `navsat_transform_node` untuk membuat transform `map -> odom` dari
 `/asv/gps/fix`, `/asv/imu/data`, dan odometry lokal.
 
-STVL tidak diaktifkan di default karena sensor utama saat ini adalah 2D
-`LaserScan`. STVL lebih cocok untuk depth camera atau 3D LiDAR yang publish
-`PointCloud2`, lalu masuk ke costmap sebagai voxel layer.
+STVL sekarang dipakai di local costmap. Karena sensor fisik masih 2D
+`LaserScan`, data difilter dulu lalu dikonversi menjadi `PointCloud2` tipis
+oleh `lidar_scan_to_pointcloud.py`. Paket STVL perlu tersedia di sistem:
+
+```bash
+sudo apt install ros-jazzy-spatio-temporal-voxel-layer
+```
+
+Jika paket ini belum terpasang, Nav2 akan gagal memuat local costmap karena
+plugin `spatio_temporal_voxel_layer/SpatioTemporalVoxelLayer` tidak ditemukan.
 
 ## Mode ArduPilot
 

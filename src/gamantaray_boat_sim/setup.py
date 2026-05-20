@@ -76,6 +76,7 @@ setup(
             'rviz_boat_marker = gamantaray_boat_sim.rviz_boat_marker:main',
             'lidar_obstacle_marker = gamantaray_boat_sim.lidar_obstacle_marker:main',
             'lidar_scan_filter = gamantaray_boat_sim.lidar_scan_filter:main',
+            'lidar_scan_to_pointcloud = gamantaray_boat_sim.lidar_scan_to_pointcloud:main',
             'lidar_ray_marker = gamantaray_boat_sim.lidar_ray_marker:main',
             'anti_sink_guard = gamantaray_boat_sim.anti_sink_guard:main',
             'ardupilot_lidar_bridge = gamantaray_boat_sim.ardupilot_lidar_bridge:main',

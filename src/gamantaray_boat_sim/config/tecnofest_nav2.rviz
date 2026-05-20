@@ -7,11 +7,8 @@ Panels:
         - /Global Options1
         - /TF1
         - /Boat Model1
-        - /LiDAR1
-        - /LiDAR Obstacles1
-        - /Global Path1
-        - /Global Costmap1
         - /Local Costmap1
+        - /Global Path1
       Splitter Ratio: 0.5
     Tree Height: 712
 Visualization Manager:
@@ -58,18 +55,7 @@ Visualization Manager:
       Enabled: true
       Name: Boat Model
       Namespaces:
-        asv_mesh: true
-        bow_direction: true
-        front_camera: true
-        hull: true
         hull_deck: true
-        left_propeller: true
-        left_thruster: true
-        lidar_mast: true
-        lidar_sensor: true
-        right_propeller: true
-        right_thruster: true
-        sensor_crossbar: true
       Topic:
         Durability Policy: Transient Local
         Reliability Policy: Reliable
@@ -86,7 +72,7 @@ Visualization Manager:
       Color: 255; 80; 40
       Color Transformer: FlatColor
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Name: LiDAR
       Position Transformer: XYZ
       Selectable: true
@@ -98,9 +84,9 @@ Visualization Manager:
         Reliability Policy: Best Effort
         Value: /asv/lidar/scan
       Use Fixed Frame: true
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/Marker
-      Enabled: true
+      Enabled: false
       Name: LiDAR Rays
       Namespaces:
         lidar_rays: true
@@ -108,7 +94,7 @@ Visualization Manager:
         Durability Policy: Volatile
         Reliability Policy: Reliable
         Value: /asv/visualization/lidar_rays
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: LiDAR Obstacles
@@ -135,7 +121,7 @@ Visualization Manager:
         Value: /global_costmap/costmap_updates
       Use Timestamp: false
       Value: false
-    - Alpha: 0.45
+    - Alpha: 0.72
       Class: rviz_default_plugins/Map
       Color Scheme: costmap
       Draw Behind: true

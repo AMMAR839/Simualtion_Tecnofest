@@ -110,7 +110,6 @@
       <uri>model://tecnofest_ocean_waves</uri>
     </include>
 
-    <!-- Startpoint and GN task points from the reference drawing. These are visual-only markers. -->
     <include><name>startpoint_marker</name><pose>-49.0 -8.0 0.02 0 0 0</pose><uri>model://tecnofest_startpoint_black</uri></include>
     <include><name>gn1_task_point</name><pose>-40.0 -4.0 0.02 0 0 0</pose><uri>model://tecnofest_task_point_blue</uri></include>
     <include><name>gn2_task_point</name><pose>-32.0 4.5 0.02 0 0 0</pose><uri>model://tecnofest_task_point_blue</uri></include>
@@ -118,9 +117,6 @@
     <include><name>gn4_task_point</name><pose>-16.0 4.5 0.02 0 0 0</pose><uri>model://tecnofest_task_point_blue</uri></include>
     <include><name>gn5_task_point</name><pose>36.5 -1.2 0.02 0 0 0</pose><uri>model://tecnofest_task_point_blue</uri></include>
 
-    <!-- Parkur 1 tuning:
-         - edit GN markers above and matching Nav2 waypoints in config/tecnofest_waypoints.yaml
-         - edit paired buoys below; each upper/lower pair is the 8-12 m checked distance -->
     <include><name>p1_s1_upper_01</name><pose>-43.6 -0.6 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
     <include><name>p1_s1_upper_02</name><pose>-37.8 5.6 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
     <include><name>p1_s1_upper_03</name><pose>-32.0 11.8 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
@@ -142,30 +138,29 @@
     <include><name>p1_s3_lower_02</name><pose>-16.2 -3.0 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
     <include><name>p1_s3_lower_03</name><pose>-12.4 1.1 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
 
-    <!-- Parkur 2: target buoys in a zig-zag pattern, matching the reference order. -->
-    <include><name>p2_top_edge_01</name><pose>-16.0 9.5 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
-    <include><name>p2_top_edge_02</name><pose>-11.0 9.0 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
-    <include><name>p2_top_edge_03</name><pose>-6.0 8.4 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
-    <include><name>p2_top_edge_04</name><pose>-1.0 7.9 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
-    <include><name>p2_top_edge_05</name><pose>4.0 7.3 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
-    <include><name>p2_top_edge_06</name><pose>9.0 6.8 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
-    <include><name>p2_top_edge_07</name><pose>14.0 6.2 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
-    <include><name>p2_top_edge_08</name><pose>19.0 5.7 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
-    <include><name>p2_top_edge_09</name><pose>24.0 5.2 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
-    <include><name>p2_top_edge_10</name><pose>29.0 4.6 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
-    <include><name>p2_top_edge_11</name><pose>34.0 4.1 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_top_edge_01</name><pose>-16.0 12.0 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_top_edge_02</name><pose>-11.0 11.5 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_top_edge_03</name><pose>-6.0 10.9 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_top_edge_04</name><pose>-1.0 10.4 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_top_edge_05</name><pose>4.0 9.8 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_top_edge_06</name><pose>9.0 9.3 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_top_edge_07</name><pose>14.0 8.7 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_top_edge_08</name><pose>19.0 8.2 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_top_edge_09</name><pose>24.0 7.7 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_top_edge_10</name><pose>29.0 7.1 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_top_edge_11</name><pose>34.0 6.6 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
 
-    <include><name>p2_bottom_edge_01</name><pose>-16.0 -0.5 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
-    <include><name>p2_bottom_edge_02</name><pose>-11.0 -1.0 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
-    <include><name>p2_bottom_edge_03</name><pose>-6.0 -1.6 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
-    <include><name>p2_bottom_edge_04</name><pose>-1.0 -2.1 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
-    <include><name>p2_bottom_edge_05</name><pose>4.0 -2.7 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
-    <include><name>p2_bottom_edge_06</name><pose>9.0 -3.2 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
-    <include><name>p2_bottom_edge_07</name><pose>14.0 -3.8 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
-    <include><name>p2_bottom_edge_08</name><pose>19.0 -4.3 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
-    <include><name>p2_bottom_edge_09</name><pose>24.0 -4.8 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
-    <include><name>p2_bottom_edge_10</name><pose>29.0 -5.4 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
-    <include><name>p2_bottom_edge_11</name><pose>34.0 -5.9 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_bottom_edge_01</name><pose>-16.0 -3.0 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_bottom_edge_02</name><pose>-11.0 -3.5 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_bottom_edge_03</name><pose>-6.0 -4.1 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_bottom_edge_04</name><pose>-1.0 -4.6 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_bottom_edge_05</name><pose>4.0 -5.2 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_bottom_edge_06</name><pose>9.0 -5.7 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_bottom_edge_07</name><pose>14.0 -6.3 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_bottom_edge_08</name><pose>19.0 -6.8 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_bottom_edge_09</name><pose>24.0 -7.3 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_bottom_edge_10</name><pose>29.0 -7.9 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
+    <include><name>p2_bottom_edge_11</name><pose>34.0 -8.4 0.0 0 0 0</pose><uri>model://tecnofest_buoy_boundary_orange</uri></include>
 
     <include><name>p2_obstacle_01</name><pose>-13.5 1.7 0.0 0 0 0</pose><uri>model://tecnofest_buoy_obstacle_yellow</uri></include>
     <include><name>p2_obstacle_02</name><pose>-8.5 6.2 0.0 0 0 0</pose><uri>model://tecnofest_buoy_obstacle_yellow</uri></include>
@@ -178,7 +173,6 @@
     <include><name>p2_obstacle_09</name><pose>26.5 -2.6 0.0 0 0 0</pose><uri>model://tecnofest_buoy_obstacle_yellow</uri></include>
     <include><name>p2_obstacle_10</name><pose>31.5 1.9 0.0 0 0 0</pose><uri>model://tecnofest_buoy_obstacle_yellow</uri></include>
 
-    <!-- Parkur 3: target buoys stacked vertically, matching the reference order. -->
     <include><name>course3_target_red</name><pose>46.0 6.6 0.0 0 0 0</pose><uri>model://tecnofest_buoy_target_red</uri></include>
     <include><name>course3_target_green</name><pose>46.0 1.8 0.0 0 0 0</pose><uri>model://tecnofest_buoy_target_green</uri></include>
     <include><name>course3_target_black</name><pose>46.0 -3.0 0.0 0 0 0</pose><uri>model://tecnofest_buoy_target_black</uri></include>

@@ -9,6 +9,8 @@
   <buildtool_depend>ament_python</buildtool_depend>
 
   <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>gamantaray_nav2_bt_plugins</exec_depend>
+  <exec_depend>laser_geometry</exec_depend>
   <exec_depend>mavros</exec_depend>
   <exec_depend>mavros_msgs</exec_depend>
   <exec_depend>nav2_bringup</exec_depend>
@@ -22,6 +24,7 @@
   <exec_depend>rviz2</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>
+  <exec_depend>spatio_temporal_voxel_layer</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>visualization_msgs</exec_depend>
 

@@ -15,32 +15,73 @@ ardupilot_waypoint_mission:
     guided_mode: "GUIDED"
     guided_mavlink_urls: ["tcp:127.0.0.1:5762", "tcp:127.0.0.1:5763", "tcp:127.0.0.1:5760"]
     guided_mavlink_timeout_s: 8.0
+    guided_require_mavros: false
+    guided_optional_mavros_setup: false
     guided_setpoint_rate_hz: 4.0
     guided_use_lookahead_target: true
-    guided_lookahead_m: 9.0
+    guided_lookahead_m: 4.5
+    guided_course2_route_enabled: true
+    guided_course2_route_points:
+      - "-12.8,4.2"
+      - "-5.8,3.6"
+      - "0.5,2.8"
+      - "7.8,2.0"
+      - "14.0,1.3"
+      - "21.0,0.3"
+      - "28.5,-0.5"
+      - "34.0,-0.9"
     guided_direct_thrust: true
     direct_left_topic: "/asv/ardupilot/direct_left_thrust"
     direct_right_topic: "/asv/ardupilot/direct_right_thrust"
     direct_thrust_rate_hz: 20.0
-    direct_cruise_thrust_n: 145.0
-    direct_min_forward_thrust_n: 75.0
-    direct_max_forward_thrust_n: 160.0
-    direct_max_reverse_thrust_n: 12.0
-    direct_yaw_thrust_n_per_rad: 48.0
-    direct_max_turn_thrust_n: 70.0
+    direct_cruise_thrust_n: 125.0
+    direct_min_forward_thrust_n: 58.0
+    direct_max_forward_thrust_n: 165.0
+    direct_max_reverse_thrust_n: 58.0
+    direct_yaw_thrust_n_per_rad: 88.0
+    direct_max_turn_thrust_n: 112.0
     direct_slowdown_radius_m: 9.0
+    direct_pivot_yaw_error_rad: 1.15
+    direct_large_yaw_error_rad: 0.65
+    direct_pivot_throttle_fraction: 0.12
+    direct_large_yaw_throttle_fraction: 0.46
     direct_yaw_sign: 1.0
+    # Default guided mode follows the shaped waypoint route first. ArduPilot
+    # proximity/OA can still be enabled from launch with ardupilot_enable_oa:=true.
+    direct_avoidance_enabled: false
+    direct_avoidance_scan_topic: "/asv/lidar/scan"
+    direct_avoidance_distance_m: 3.80
+    direct_avoidance_half_angle_deg: 55.0
+    direct_avoidance_min_range_m: 0.75
+    direct_avoidance_min_points: 2
+    direct_avoidance_turn_bias_rad: 1.05
+    direct_avoidance_throttle_fraction: 0.55
+    direct_avoidance_memory_s: 1.80
+    direct_backup_distance_m: 1.50
+    direct_backup_thrust_n: 32.0
+    direct_backup_turn_thrust_n: 118.0
+    direct_stuck_recovery_enabled: true
+    direct_stuck_timeout_s: 7.0
+    direct_stuck_min_progress_m: 0.35
+    direct_stuck_backup_duration_s: 1.25
+    direct_stuck_turn_duration_s: 1.40
+    direct_stuck_backup_thrust_n: 38.0
+    direct_stuck_turn_thrust_n: 125.0
+    direct_stuck_skip_virtual_waypoints: true
+    direct_stuck_virtual_skip_max_distance_m: 60.0
 
     # Larger ASV waypoint radius prevents turning back after the boat has
     # already passed a waypoint near the correct path.
-    waypoint_radius_m: 8.00
-    final_waypoint_radius_m: 10.00
+    waypoint_radius_m: 6.50
+    virtual_waypoint_radius_m: 4.80
+    course2_entry_waypoint_radius_m: 7.50
+    final_waypoint_radius_m: 7.00
     waypoint_passed_margin_m: 2.00
-    waypoint_passed_cross_track_m: 20.00
+    waypoint_passed_cross_track_m: 12.00
     waypoint_recede_skip_enabled: true
-    waypoint_recede_skip_radius_m: 16.00
+    waypoint_recede_skip_radius_m: 9.00
     waypoint_recede_skip_margin_m: 3.00
-    final_waypoint_progress_fraction: 0.85
+    final_waypoint_progress_fraction: 0.90
     enable_passed_waypoint_skip: true
 
     auto_upload: true

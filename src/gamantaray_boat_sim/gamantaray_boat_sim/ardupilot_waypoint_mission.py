@@ -17,6 +17,7 @@ from nav_msgs.msg import Odometry
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
+from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Float64, String
 
 try:
@@ -43,8 +44,10 @@ class ArduPilotWaypointMission(Node):
         self.declare_parameter("origin_alt_m", 0.0)
         self.declare_parameter("mission_alt_m", 0.0)
         self.declare_parameter("control_mode", "guided")
-        self.declare_parameter("waypoint_radius_m", 5.50)
-        self.declare_parameter("final_waypoint_radius_m", 10.00)
+        self.declare_parameter("waypoint_radius_m", 6.50)
+        self.declare_parameter("virtual_waypoint_radius_m", 4.80)
+        self.declare_parameter("course2_entry_waypoint_radius_m", 7.50)
+        self.declare_parameter("final_waypoint_radius_m", 7.00)
         self.declare_parameter("waypoint_passed_margin_m", 2.00)
         self.declare_parameter("waypoint_passed_cross_track_m", 18.00)
         self.declare_parameter("waypoint_recede_skip_enabled", True)
@@ -63,9 +66,25 @@ class ArduPilotWaypointMission(Node):
             ["tcp:127.0.0.1:5762", "tcp:127.0.0.1:5763", "tcp:127.0.0.1:5760"],
         )
         self.declare_parameter("guided_mavlink_timeout_s", 8.0)
+        self.declare_parameter("guided_require_mavros", False)
+        self.declare_parameter("guided_optional_mavros_setup", False)
         self.declare_parameter("guided_setpoint_rate_hz", 4.0)
         self.declare_parameter("guided_use_lookahead_target", True)
         self.declare_parameter("guided_lookahead_m", 9.0)
+        self.declare_parameter("guided_course2_route_enabled", True)
+        self.declare_parameter(
+            "guided_course2_route_points",
+            [
+                "-12.8,4.2",
+                "-5.8,3.6",
+                "0.5,2.8",
+                "7.8,2.0",
+                "14.0,1.3",
+                "21.0,0.3",
+                "28.5,-0.5",
+                "34.0,-0.9",
+            ],
+        )
         self.declare_parameter("guided_direct_thrust", True)
         self.declare_parameter("direct_left_topic", "/asv/ardupilot/direct_left_thrust")
         self.declare_parameter("direct_right_topic", "/asv/ardupilot/direct_right_thrust")
@@ -77,7 +96,32 @@ class ArduPilotWaypointMission(Node):
         self.declare_parameter("direct_yaw_thrust_n_per_rad", 48.0)
         self.declare_parameter("direct_max_turn_thrust_n", 70.0)
         self.declare_parameter("direct_slowdown_radius_m", 9.0)
+        self.declare_parameter("direct_pivot_yaw_error_rad", 1.15)
+        self.declare_parameter("direct_large_yaw_error_rad", 0.65)
+        self.declare_parameter("direct_pivot_throttle_fraction", 0.16)
+        self.declare_parameter("direct_large_yaw_throttle_fraction", 0.48)
         self.declare_parameter("direct_yaw_sign", 1.0)
+        self.declare_parameter("direct_avoidance_enabled", True)
+        self.declare_parameter("direct_avoidance_scan_topic", "/asv/lidar/scan")
+        self.declare_parameter("direct_avoidance_distance_m", 3.20)
+        self.declare_parameter("direct_avoidance_half_angle_deg", 34.0)
+        self.declare_parameter("direct_avoidance_min_range_m", 0.75)
+        self.declare_parameter("direct_avoidance_min_points", 3)
+        self.declare_parameter("direct_avoidance_turn_bias_rad", 0.95)
+        self.declare_parameter("direct_avoidance_throttle_fraction", 0.50)
+        self.declare_parameter("direct_avoidance_memory_s", 1.20)
+        self.declare_parameter("direct_backup_distance_m", 1.35)
+        self.declare_parameter("direct_backup_thrust_n", 24.0)
+        self.declare_parameter("direct_backup_turn_thrust_n", 96.0)
+        self.declare_parameter("direct_stuck_recovery_enabled", True)
+        self.declare_parameter("direct_stuck_timeout_s", 4.0)
+        self.declare_parameter("direct_stuck_min_progress_m", 0.35)
+        self.declare_parameter("direct_stuck_backup_duration_s", 1.25)
+        self.declare_parameter("direct_stuck_turn_duration_s", 1.75)
+        self.declare_parameter("direct_stuck_backup_thrust_n", 38.0)
+        self.declare_parameter("direct_stuck_turn_thrust_n", 125.0)
+        self.declare_parameter("direct_stuck_skip_virtual_waypoints", True)
+        self.declare_parameter("direct_stuck_virtual_skip_max_distance_m", 60.0)
         self.declare_parameter("arm_vehicle", True)
         self.declare_parameter("force_arm_if_needed", True)
         self.declare_parameter("rtl_on_finish", False)
@@ -115,6 +159,12 @@ class ArduPilotWaypointMission(Node):
         qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
         self.create_subscription(State, f"{mavros_ns}/state", self.on_state, 10)
         self.create_subscription(Odometry, "/asv/odom", self.on_odom, qos)
+        self.create_subscription(
+            LaserScan,
+            str(self.get_parameter("direct_avoidance_scan_topic").value),
+            self.on_scan,
+            qos,
+        )
         self.create_subscription(
             WaypointReached,
             f"{mavros_ns}/mission/reached",
@@ -163,6 +213,18 @@ class ArduPilotWaypointMission(Node):
         self.state = None
         self.odom_xy = None
         self.odom_yaw = 0.0
+        self.latest_scan = None
+        self.last_scan_time = 0.0
+        self.last_avoidance_time = 0.0
+        self.last_avoidance_turn_sign = 1.0
+        self.last_avoidance_min_range = float("inf")
+        self.last_avoidance_points = 0
+        self.direct_progress_index = -1
+        self.direct_best_distance = float("inf")
+        self.direct_last_progress_time = 0.0
+        self.direct_recovery_until = 0.0
+        self.direct_recovery_backup_until = 0.0
+        self.direct_recovery_turn_sign = 1.0
         self.start_xy = None
         self.local_waypoints = []
         self.active_index = 0
@@ -213,6 +275,10 @@ class ArduPilotWaypointMission(Node):
         )
         self.odom_yaw = self.quaternion_to_yaw(msg.pose.pose.orientation)
 
+    def on_scan(self, msg):
+        self.latest_scan = msg
+        self.last_scan_time = time.monotonic()
+
     def on_waypoint_reached(self, msg):
         reached = int(msg.wp_seq)
         self.active_index = max(self.active_index, reached + 1)
@@ -226,8 +292,6 @@ class ArduPilotWaypointMission(Node):
 
         if not self.load_waypoints():
             return
-        if not self.wait_for_mavros():
-            return
 
         if self.control_mode == "guided":
             self.start_guided_mode()
@@ -235,6 +299,9 @@ class ArduPilotWaypointMission(Node):
 
         if self.control_mode not in ("auto_mission", "auto"):
             self.publish_status(f"ardupilot_unknown_control_mode:{self.control_mode}")
+            return
+
+        if not self.wait_for_mavros():
             return
 
         if not self.prepare_services(include_mission=True):
@@ -275,8 +342,34 @@ class ArduPilotWaypointMission(Node):
         )
 
     def start_guided_mode(self):
+        direct_enabled = bool(self.get_parameter("guided_direct_thrust").value)
+        require_mavros = bool(self.get_parameter("guided_require_mavros").value)
+
+        if direct_enabled and not require_mavros:
+            self.active_index = 0
+            self.closest_distance_by_index.clear()
+            self.mission_uploaded = True
+            self.finish_reported = False
+            self.guided_start_time = time.monotonic()
+            self.publish_status(
+                f"ardupilot_guided_direct_started:{len(self.local_waypoints)}"
+            )
+            if mavutil is None:
+                self.publish_status("ardupilot_guided_mavlink_skipped:pymavlink_missing")
+                return
+            if self.state is None or not self.state.connected:
+                self.publish_status("ardupilot_guided_mavros_optional:not_connected")
+                return
+            if not bool(self.get_parameter("guided_optional_mavros_setup").value):
+                self.publish_status("ardupilot_guided_mavros_optional:setup_skipped")
+                return
+            self.try_prepare_guided_mavros_best_effort()
+            return
+
         if mavutil is None:
             self.publish_status("ardupilot_guided_missing_pymavlink")
+            return
+        if not self.wait_for_mavros():
             return
         if not self.prepare_services(include_mission=False):
             return
@@ -287,6 +380,8 @@ class ArduPilotWaypointMission(Node):
         self.active_index = 0
         self.closest_distance_by_index.clear()
         self.mission_uploaded = True
+        self.finish_reported = False
+        self.guided_start_time = time.monotonic()
 
         mode_before_arm = str(self.get_parameter("mode_before_arm").value).strip()
         if mode_before_arm:
@@ -300,6 +395,26 @@ class ArduPilotWaypointMission(Node):
         self.publish_status(
             f"ardupilot_guided_started:{len(self.local_waypoints)}:mode:{guided_mode}"
         )
+
+    def try_prepare_guided_mavros_best_effort(self):
+        if not self.prepare_services(include_mission=False):
+            self.publish_status("ardupilot_guided_mavros_optional:services_unavailable")
+            return
+        self.guided_mavlink = self.connect_guided_mavlink()
+        if self.guided_mavlink is None:
+            self.publish_status("ardupilot_guided_mavros_optional:mavlink_unavailable")
+            return
+
+        mode_before_arm = str(self.get_parameter("mode_before_arm").value).strip()
+        if mode_before_arm:
+            self.call_set_mode(mode_before_arm, wait=False)
+
+        if bool(self.get_parameter("arm_vehicle").value):
+            self.call_arm(True)
+
+        guided_mode = str(self.get_parameter("guided_mode").value).strip() or "GUIDED"
+        self.call_set_mode(guided_mode, wait=False)
+        self.publish_status(f"ardupilot_guided_mavros_optional:started:{guided_mode}")
 
     def load_waypoints(self):
         waypoint_file = Path(str(self.get_parameter("waypoint_file").value))
@@ -329,8 +444,69 @@ class ArduPilotWaypointMission(Node):
                 }
             )
 
+        if self.control_mode == "guided" and bool(
+            self.get_parameter("guided_course2_route_enabled").value
+        ):
+            self.local_waypoints = self.expand_course2_route(self.local_waypoints)
+
         self.publish_status(f"ardupilot_waypoints_loaded:{len(self.local_waypoints)}")
         return bool(self.local_waypoints)
+
+    def expand_course2_route(self, waypoints):
+        if len(waypoints) < 2:
+            return waypoints
+
+        route_points = self.parse_route_points(
+            self.get_parameter("guided_course2_route_points").value
+        )
+        if not route_points:
+            return waypoints
+
+        expanded = []
+        inserted = False
+        for index, waypoint in enumerate(waypoints):
+            expanded.append(waypoint)
+            if index >= len(waypoints) - 1:
+                continue
+
+            current_name = str(waypoint.get("name", "")).lower()
+            next_name = str(waypoints[index + 1].get("name", "")).lower()
+            if "gn4" not in current_name or "gn5" not in next_name:
+                continue
+
+            for route_index, (x, y) in enumerate(route_points, start=1):
+                lat, lon = self.enu_to_wgs84(x, y)
+                expanded.append(
+                    {
+                        "name": f"p2_safe_{route_index:02d}",
+                        "x": x,
+                        "y": y,
+                        "lat": lat,
+                        "lon": lon,
+                        "virtual": True,
+                    }
+                )
+            inserted = True
+
+        if inserted:
+            self.publish_status(f"ardupilot_course2_route_inserted:{len(route_points)}")
+        return expanded
+
+    @staticmethod
+    def parse_route_points(value):
+        points = []
+        for item in value:
+            if isinstance(item, str):
+                pieces = [piece.strip() for piece in item.split(",")]
+            else:
+                pieces = list(item)
+            if len(pieces) < 2:
+                continue
+            try:
+                points.append((float(pieces[0]), float(pieces[1])))
+            except (TypeError, ValueError):
+                continue
+        return points
 
     def wait_for_mavros(self):
         timeout_s = float(self.get_parameter("connection_timeout_s").value)
@@ -611,7 +787,8 @@ class ArduPilotWaypointMission(Node):
         target = self.local_waypoints[self.active_index]
         target_xy = (float(target["x"]), float(target["y"]))
         if (
-            not bool(self.get_parameter("guided_use_lookahead_target").value)
+            bool(target.get("virtual", False))
+            or not bool(self.get_parameter("guided_use_lookahead_target").value)
             or self.active_index >= len(self.local_waypoints) - 1
         ):
             return target_xy
@@ -650,6 +827,12 @@ class ArduPilotWaypointMission(Node):
 
         desired_yaw = math.atan2(dy, dx)
         yaw_error = self.angle_delta(desired_yaw, self.odom_yaw)
+        avoid_danger, avoid_backup, avoid_turn_sign, _points, _min_range = (
+            self.direct_avoidance_state()
+        )
+        stuck_active, stuck_backup, stuck_turn_sign = self.direct_stuck_state(
+            distance, yaw_error
+        )
         cruise = float(self.get_parameter("direct_cruise_thrust_n").value)
         min_forward = float(self.get_parameter("direct_min_forward_thrust_n").value)
         slowdown_radius = max(
@@ -657,27 +840,243 @@ class ArduPilotWaypointMission(Node):
         )
         throttle = cruise * min(1.0, max(0.35, distance / slowdown_radius))
 
+        yaw_sign = float(self.get_parameter("direct_yaw_sign").value)
+        max_forward = abs(float(self.get_parameter("direct_max_forward_thrust_n").value))
+        max_reverse = abs(float(self.get_parameter("direct_max_reverse_thrust_n").value))
+        if stuck_active:
+            backup = abs(float(self.get_parameter("direct_stuck_backup_thrust_n").value))
+            turn_power = abs(
+                float(self.get_parameter("direct_stuck_turn_thrust_n").value)
+            )
+            turn = yaw_sign * stuck_turn_sign * turn_power
+            if stuck_backup:
+                base = -backup
+            else:
+                base = min_forward * 0.35
+            left = self.clamp(base - turn, -max_reverse, max_forward)
+            right = self.clamp(base + turn, -max_reverse, max_forward)
+            self.publish_direct_pair(left, right)
+            return
+
+        if avoid_backup:
+            backup = abs(float(self.get_parameter("direct_backup_thrust_n").value))
+            backup_turn = abs(
+                float(self.get_parameter("direct_backup_turn_thrust_n").value)
+            )
+            turn = yaw_sign * avoid_turn_sign * backup_turn
+            left = self.clamp(-backup - turn, -max_reverse, max_forward)
+            right = self.clamp(-backup + turn, -max_reverse, max_forward)
+            self.publish_direct_pair(left, right)
+            return
+
+        if avoid_danger:
+            turn_bias = abs(
+                float(self.get_parameter("direct_avoidance_turn_bias_rad").value)
+            )
+            yaw_error = self.angle_delta(
+                yaw_error + avoid_turn_sign * turn_bias,
+                0.0,
+            )
+
         abs_error = abs(yaw_error)
-        if abs_error > 1.35:
-            throttle = min(throttle, max(min_forward, cruise * 0.38))
-        elif abs_error > 0.75:
-            throttle = min(throttle, max(min_forward, cruise * 0.62))
+        pivot_error = abs(float(self.get_parameter("direct_pivot_yaw_error_rad").value))
+        large_error = abs(float(self.get_parameter("direct_large_yaw_error_rad").value))
+        pivot_fraction = self.clamp(
+            float(self.get_parameter("direct_pivot_throttle_fraction").value),
+            0.0,
+            1.0,
+        )
+        large_fraction = self.clamp(
+            float(self.get_parameter("direct_large_yaw_throttle_fraction").value),
+            0.0,
+            1.0,
+        )
+        if abs_error > pivot_error:
+            throttle = min(throttle, cruise * pivot_fraction)
+        elif abs_error > large_error:
+            throttle = min(throttle, max(min_forward, cruise * large_fraction))
         else:
             throttle = max(min_forward, throttle)
 
+        if avoid_danger:
+            throttle *= self.clamp(
+                float(self.get_parameter("direct_avoidance_throttle_fraction").value),
+                0.05,
+                1.0,
+            )
+
         yaw_gain = float(self.get_parameter("direct_yaw_thrust_n_per_rad").value)
-        yaw_sign = float(self.get_parameter("direct_yaw_sign").value)
         max_turn = abs(float(self.get_parameter("direct_max_turn_thrust_n").value))
         turn = yaw_sign * self.clamp(yaw_gain * yaw_error, -max_turn, max_turn)
-        max_forward = abs(float(self.get_parameter("direct_max_forward_thrust_n").value))
-        max_reverse = abs(float(self.get_parameter("direct_max_reverse_thrust_n").value))
         left = self.clamp(throttle - turn, -max_reverse, max_forward)
         right = self.clamp(throttle + turn, -max_reverse, max_forward)
         self.publish_direct_pair(left, right)
 
+    def direct_avoidance_state(self):
+        if not bool(self.get_parameter("direct_avoidance_enabled").value):
+            return False, False, 1.0, 0, float("inf")
+        if self.latest_scan is None:
+            return False, False, 1.0, 0, float("inf")
+        now = time.monotonic()
+        if now - self.last_scan_time > 1.0:
+            return False, False, 1.0, 0, float("inf")
+
+        danger_distance = float(
+            self.get_parameter("direct_avoidance_distance_m").value
+        )
+        half_angle = math.radians(
+            float(self.get_parameter("direct_avoidance_half_angle_deg").value)
+        )
+        min_range = max(
+            float(self.latest_scan.range_min),
+            float(self.get_parameter("direct_avoidance_min_range_m").value),
+        )
+        min_points = int(self.get_parameter("direct_avoidance_min_points").value)
+
+        count = 0
+        nearest = float("inf")
+        angle = self.latest_scan.angle_min
+        for distance in self.latest_scan.ranges:
+            if (
+                math.isfinite(distance)
+                and min_range <= distance <= danger_distance
+                and abs(angle) <= half_angle
+            ):
+                count += 1
+                nearest = min(nearest, float(distance))
+            angle += self.latest_scan.angle_increment
+
+        if count < min_points:
+            memory_s = float(self.get_parameter("direct_avoidance_memory_s").value)
+            if now - self.last_avoidance_time <= memory_s:
+                backup = self.last_avoidance_min_range <= float(
+                    self.get_parameter("direct_backup_distance_m").value
+                )
+                return (
+                    True,
+                    backup,
+                    self.last_avoidance_turn_sign,
+                    self.last_avoidance_points,
+                    self.last_avoidance_min_range,
+                )
+            return False, False, 1.0, count, nearest
+
+        left_clear = self.direct_side_clearance(0.45, 1.75)
+        right_clear = self.direct_side_clearance(-1.75, -0.45)
+        turn_sign = 1.0 if left_clear >= right_clear else -1.0
+        self.last_avoidance_time = now
+        self.last_avoidance_turn_sign = turn_sign
+        self.last_avoidance_min_range = nearest
+        self.last_avoidance_points = count
+        backup = nearest <= float(self.get_parameter("direct_backup_distance_m").value)
+        return True, backup, turn_sign, count, nearest
+
+    def direct_side_clearance(self, angle_min, angle_max):
+        if self.latest_scan is None:
+            return 0.0
+        values = []
+        angle = self.latest_scan.angle_min
+        capped_max = min(float(self.latest_scan.range_max), 10.0)
+        min_range = max(
+            float(self.latest_scan.range_min),
+            float(self.get_parameter("direct_avoidance_min_range_m").value),
+        )
+        for distance in self.latest_scan.ranges:
+            if angle_min <= angle <= angle_max and math.isfinite(distance):
+                values.append(max(min_range, min(float(distance), capped_max)))
+            angle += self.latest_scan.angle_increment
+        if not values:
+            return capped_max
+        values.sort(reverse=True)
+        top = values[: max(1, len(values) // 3)]
+        return sum(top) / len(top)
+
     def publish_direct_pair(self, left, right):
         self.direct_left_pub.publish(Float64(data=float(left)))
         self.direct_right_pub.publish(Float64(data=float(right)))
+
+    def direct_stuck_state(self, distance, yaw_error):
+        if not bool(self.get_parameter("direct_stuck_recovery_enabled").value):
+            return False, False, 1.0
+        now = time.monotonic()
+        if self.active_index != self.direct_progress_index:
+            self.direct_progress_index = self.active_index
+            self.direct_best_distance = distance
+            self.direct_last_progress_time = now
+            self.direct_recovery_until = 0.0
+            self.direct_recovery_backup_until = 0.0
+            return False, False, 1.0
+
+        if now < self.direct_recovery_until:
+            return (
+                True,
+                now < self.direct_recovery_backup_until,
+                self.direct_recovery_turn_sign,
+            )
+
+        min_progress = abs(
+            float(self.get_parameter("direct_stuck_min_progress_m").value)
+        )
+        if distance < self.direct_best_distance - min_progress:
+            self.direct_best_distance = distance
+            self.direct_last_progress_time = now
+            return False, False, 1.0
+
+        timeout_s = abs(float(self.get_parameter("direct_stuck_timeout_s").value))
+        active_radius = self.active_waypoint_radius()
+        if distance <= active_radius * 1.05 or now - self.direct_last_progress_time < timeout_s:
+            return False, False, 1.0
+
+        target = self.local_waypoints[self.active_index]
+        if bool(target.get("virtual", False)) and bool(
+            self.get_parameter("direct_stuck_skip_virtual_waypoints").value
+        ):
+            max_skip_distance = abs(
+                float(
+                    self.get_parameter(
+                        "direct_stuck_virtual_skip_max_distance_m"
+                    ).value
+                )
+            )
+            if distance <= max_skip_distance:
+                skipped = self.active_index
+                name = str(target.get("name", f"wp{skipped + 1}"))
+                self.active_index += 1
+                self.closest_distance_by_index.pop(skipped, None)
+                self.direct_progress_index = -1
+                self.direct_best_distance = float("inf")
+                self.direct_last_progress_time = now
+                self.direct_recovery_until = 0.0
+                self.direct_recovery_backup_until = 0.0
+                self.publish_status(
+                    "ardupilot_waypoint_skip:"
+                    f"{skipped}:virtual_stuck:{name}:dist={distance:.1f}m"
+                )
+                return False, False, 1.0
+
+        left_clear = self.direct_side_clearance(0.45, 1.75)
+        right_clear = self.direct_side_clearance(-1.75, -0.45)
+        if left_clear == right_clear:
+            turn_sign = 1.0 if yaw_error >= 0.0 else -1.0
+        else:
+            turn_sign = 1.0 if left_clear > right_clear else -1.0
+        self.direct_recovery_turn_sign = turn_sign
+        backup_duration = abs(
+            float(self.get_parameter("direct_stuck_backup_duration_s").value)
+        )
+        turn_duration = abs(
+            float(self.get_parameter("direct_stuck_turn_duration_s").value)
+        )
+        self.direct_recovery_backup_until = now + backup_duration
+        self.direct_recovery_until = now + backup_duration + turn_duration
+        self.direct_last_progress_time = now
+        self.direct_best_distance = distance
+        self.publish_status(
+            "ardupilot_direct_recovery:stuck:"
+            f"wp={self.active_index + 1}:dist={distance:.1f}m:"
+            f"turn={'left' if turn_sign > 0.0 else 'right'}"
+        )
+        return True, True, turn_sign
 
     def monitor_progress(self):
         if not self.mission_uploaded or not self.local_waypoints:
@@ -752,10 +1151,7 @@ class ArduPilotWaypointMission(Node):
             self.closest_distance_by_index[self.active_index] = distance
             closest = distance
 
-        if self.active_index == len(self.local_waypoints) - 1:
-            radius_m = float(self.get_parameter("final_waypoint_radius_m").value)
-        else:
-            radius_m = float(self.get_parameter("waypoint_radius_m").value)
+        radius_m = self.active_waypoint_radius()
         if distance <= radius_m:
             return f"radius:{distance:.2f}m"
 
@@ -795,6 +1191,19 @@ class ArduPilotWaypointMission(Node):
             return "segment_passed"
 
         return ""
+
+    def active_waypoint_radius(self):
+        if self.active_index >= len(self.local_waypoints):
+            return float(self.get_parameter("waypoint_radius_m").value)
+        waypoint = self.local_waypoints[self.active_index]
+        name = str(waypoint.get("name", "")).lower()
+        if "gn4" in name:
+            return float(self.get_parameter("course2_entry_waypoint_radius_m").value)
+        if bool(waypoint.get("virtual", False)):
+            return float(self.get_parameter("virtual_waypoint_radius_m").value)
+        if self.active_index == len(self.local_waypoints) - 1:
+            return float(self.get_parameter("final_waypoint_radius_m").value)
+        return float(self.get_parameter("waypoint_radius_m").value)
 
     @staticmethod
     def segment_passed(start_xy, target_xy, current_xy, margin_m, max_cross_track_m):

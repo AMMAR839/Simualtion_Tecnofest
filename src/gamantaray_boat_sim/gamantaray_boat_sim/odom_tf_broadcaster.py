@@ -13,6 +13,7 @@ class OdomTfBroadcaster(Node):
         self.declare_parameter("odom_topic", "/asv/odom")
         self.declare_parameter("odom_frame", "odom")
         self.declare_parameter("base_frame", "base_link")
+        self.declare_parameter("restamp_tf", True)
         self.broadcaster = TransformBroadcaster(self)
         self.create_subscription(
             Odometry, str(self.get_parameter("odom_topic").value), self.on_odom, 20
@@ -21,7 +22,10 @@ class OdomTfBroadcaster(Node):
     def on_odom(self, msg):
         transform = msg.pose.pose
         stamped = TransformStamped()
-        stamped.header.stamp = msg.header.stamp
+        if bool(self.get_parameter("restamp_tf").value):
+            stamped.header.stamp = self.get_clock().now().to_msg()
+        else:
+            stamped.header.stamp = msg.header.stamp
         stamped.header.frame_id = str(self.get_parameter("odom_frame").value) or "odom"
         stamped.child_frame_id = str(self.get_parameter("base_frame").value)
         stamped.transform.translation.x = transform.position.x

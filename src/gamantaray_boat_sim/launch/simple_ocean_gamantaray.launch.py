@@ -319,6 +319,7 @@ def generate_launch_description():
                         "odom_topic": "/asv/odom",
                         "odom_frame": "odom",
                         "base_frame": "base_link",
+                        "restamp_tf": True,
                     }
                 ],
             ),
@@ -401,8 +402,8 @@ def generate_launch_description():
                         "swap_channels": ardupilot_swap_thrusters,
                         "thrust_scale": ardupilot_thrust_scale,
                         "deadband_n": 3.0,
-                        "max_forward_thrust_n": 190.0,
-                        "max_reverse_thrust_n": 30.0,
+                        "max_forward_thrust_n": 165.0,
+                        "max_reverse_thrust_n": 60.0,
                         "opposed_reverse_scale": 0.0,
                         "direct_cmd_timeout_s": 0.35,
                         "slew_rate_nps": 260.0,
@@ -569,6 +570,29 @@ def generate_launch_description():
             ),
             Node(
                 package="gamantaray_boat_sim",
+                executable="lidar_local_costmap",
+                name="lidar_local_costmap",
+                output="screen",
+                condition=IfCondition(use_rviz),
+                parameters=[
+                    {
+                        "use_sim_time": use_sim_time,
+                        "scan_topic": "/asv/lidar/scan",
+                        "costmap_topic": "/asv/lidar/local_costmap",
+                        "frame_id": "base_link",
+                        "radius_m": 10.0,
+                        "resolution_m": 0.10,
+                        "sensor_x": 0.95,
+                        "sensor_y": 0.0,
+                        "min_valid_range_m": 0.75,
+                        "max_valid_range_m": 10.0,
+                        "inflation_radius_m": 0.36,
+                        "publish_period_s": 0.20,
+                    }
+                ],
+            ),
+            Node(
+                package="gamantaray_boat_sim",
                 executable="lidar_ray_marker",
                 name="lidar_ray_marker",
                 output="screen",
@@ -602,9 +626,9 @@ def generate_launch_description():
                         "local_window_radius_m": 10.0,
                         "sensor_x": 0.95,
                         "sensor_y": 0.0,
-                        "cluster_gap_m": 0.40,
-                        "min_cluster_points": 4,
-                        "publish_period_s": 0.35,
+                        "cluster_gap_m": 0.55,
+                        "min_cluster_points": 2,
+                        "publish_period_s": 0.20,
                     }
                 ],
             ),
@@ -797,10 +821,11 @@ def generate_launch_description():
                 ],
             ),
             TimerAction(
-                # MAVROS mission services appear after heartbeat/version/home
-                # setup. Delay mission upload so AUTO/arming is not attempted
-                # while the waypoint plugin is still initializing.
-                period=45.0,
+                # Guided direct thrust can start as soon as Gazebo odom is
+                # alive. AUTO mission service upload still waits internally for
+                # MAVROS, so this shorter delay does not remove the strict
+                # service checks used by ardupilot_control_mode:=auto_mission.
+                period=18.0,
                 actions=[
                     Node(
                         package="gamantaray_boat_sim",

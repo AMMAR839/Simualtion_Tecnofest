@@ -79,6 +79,7 @@ setup(
             'lidar_obstacle_marker = gamantaray_boat_sim.lidar_obstacle_marker:main',
             'lidar_scan_filter = gamantaray_boat_sim.lidar_scan_filter:main',
             'lidar_scan_to_pointcloud = gamantaray_boat_sim.lidar_scan_to_pointcloud:main',
+            'lidar_local_costmap = gamantaray_boat_sim.lidar_local_costmap:main',
             'lidar_ray_marker = gamantaray_boat_sim.lidar_ray_marker:main',
             'local_window_marker = gamantaray_boat_sim.local_window_marker:main',
             'anti_sink_guard = gamantaray_boat_sim.anti_sink_guard:main',

@@ -1,266 +1,78 @@
-# Gamantaray TEKNOFEST ASV Simulation
+# Gamantaray — Simulasi ASV TEKNOFEST
 
-Package ini menjalankan simulasi ASV Gamantaray untuk course TEKNOFEST di ROS 2
-Jazzy dan Gazebo Harmonic. World utama memakai lintasan air 100 m x 20 m dengan
-model wave lokal dari `tecnofest_ocean_waves`, buoy course, LiDAR, kamera, GPS,
-IMU, dan dua thruster Gazebo yang menerima command thrust.
+Simulasi kapal tanpa awak (Autonomous Surface Vehicle) **Gamantaray** untuk
+kompetisi **TEKNOFEST**. Kapal bernavigasi secara otonom melewati lintasan air
+dengan buoy zig-zag, obstacle, dan target, menggunakan ROS 2 Jazzy dan Gazebo
+Harmonic.
 
-Simulasi ini dibuat untuk stabilitas misi waypoint dan obstacle avoidance.
-Thruster memakai `gz::sim::systems::Thruster` sehingga kapal benar-benar
-bergerak dari gaya dorong di Gazebo. Wave visual dan damping hidrodinamika
-dipakai sebagai pendekatan simulasi misi yang stabil, bukan klaim model
-hidrodinamika penuh.
-Kapal juga memakai buoyancy volume yang diproses oleh
-`gz-waves1-hydrodynamics-system`, ditambah anti-sink guard ringan sebagai
-pengaman jika solver fisika sempat membuat kapal masuk di bawah mesh ombak.
+## Tampilan Simulasi
 
-World utama hanya menampilkan elemen lintasan misi: air, ASV, buoy batas,
-obstacle buoy, dan target buoy. Garis bantu start/finish dan frame area buatan
-dihapus agar tampilan mengikuti lintasan course. Layout buoy mengikuti gambar
-referensi: kapal spawn di marker hitam `Startpoint` sekitar 9.8 m sebelum GN1,
-lalu Parkur 1 memakai dua sisi batas zig-zag pada centerline GN1-GN2-GN3-GN4
-dengan lebar koridor sekitar 11.6 m. Parkur 2 berupa koridor panjang dengan
-obstacle kuning di tengah, dan
-Parkur 3 target vertikal merah, hijau, hitam. Marker GN1-GN5 berwarna biru
-hanya visual dan tidak memiliki collision. Jarak 8-12 m adalah jarak buoy
-berpasangan pada dua sisi berlawanan, bukan jarak antar buoy berurutan di satu
-sisi lintasan.
+### Gazebo — Lingkungan 3D
 
-Warna air berasal dari shader lokal
-`models/tecnofest_ocean_waves/materials/waves_fs.glsl`. Refleksi skybox pada
-shader dikurangi dan fallback material biru ditambahkan di `model.sdf` supaya
-water surface tidak tampil putih ketika dilihat di Gazebo. Model wave memakai
-`tile_size` `104 26`, mengikuti area course yang dibuat mepet dengan objek
-lintasan. Parameter wave sengaja dibuat halus (`cell_count` 48, update 10 Hz)
-agar physics kapal, costmap, dan RViz tidak terlalu berat.
+![Kapal Gamantaray berlayar di antara buoy lintasan TEKNOFEST](docs/images/gazebo_closeup.png)
 
-## Build
+Kapal Gamantaray bernavigasi di antara buoy-buoy batas lintasan. Terlihat
+model kapal dengan dual thruster, LiDAR mast, dan kamera depan.
 
-Local costmap Nav2 memakai STVL. Install dependency ini sekali sebelum launch
-Nav2:
+![Overview lintasan TEKNOFEST di Gazebo](docs/images/gazebo_overview.png)
 
-```bash
-sudo apt install ros-jazzy-spatio-temporal-voxel-layer
-```
+Overview lintasan TEKNOFEST seluas 100 × 20 m. Buoy oranye menandai batas
+koridor zig-zag (Parkur 1), buoy kuning adalah obstacle (Parkur 2), dan
+marker biru menandai checkpoint GN1–GN5.
 
-Jika package itu belum ada, build workspace tetap bisa selesai, tetapi Nav2
-akan gagal memuat plugin local costmap saat launch.
+### RViz2 — Navigasi & Sensor
+
+![RViz2 menampilkan path navigasi, costmap, dan front camera](docs/images/rviz2_nav.png)
+
+Tampilan RViz2 menunjukkan path navigasi Nav2 (garis biru), area local costmap
+(lingkaran), marker obstacle dari clustering LiDAR (titik merah), serta
+feed kamera depan kapal (kiri atas).
+
+## Fitur Utama
+
+- **Navigasi otonom** — Nav2 waypoint mission melewati 5 checkpoint (GN1–GN5)
+- **Obstacle avoidance** — LiDAR 2D + Spatio-Temporal Voxel Layer (STVL) yang
+  otomatis membuang noise ombak
+- **Dual thruster** — Dua propeller independen untuk maju, mundur, dan belok
+- **Sensor lengkap** — LiDAR, kamera depan, GPS, dan IMU
+- **3 mode navigasi** — Nav2 (otonom), Manual (teleop), ArduPilot (SITL +
+  MAVROS)
+- **3 parkur kompetisi** — Zig-zag buoy, koridor obstacle, dan target warna
+
+## Menjalankan Simulasi
 
 ```bash
+# Build workspace
 cd /home/ammar/Documents/ws_tecnofest
 source /opt/ros/jazzy/setup.bash
 colcon build --symlink-install
 source install/setup.bash
-```
 
-## Launch Utama
-
-Jalankan simulasi lengkap dengan Nav2 dan misi 5 waypoint:
-
-```bash
+# Jalankan simulasi (Nav2 otonom)
 ros2 launch gamantaray_boat_sim simple_ocean_gamantaray.launch.py
-```
 
-Jalankan hanya Gazebo, bridge, sensor, dan kontrol thruster untuk tes manual:
-
-```bash
+# Atau mode manual
 ros2 launch gamantaray_boat_sim simple_ocean_gamantaray.launch.py navigation_mode:=manual
 ```
 
-Pilih mode navigasi dari launch utama:
+## Struktur Package
 
-```bash
-ros2 launch gamantaray_boat_sim simple_ocean_gamantaray.launch.py navigation_mode:=nav2
-ros2 launch gamantaray_boat_sim simple_ocean_gamantaray.launch.py navigation_mode:=manual
-ros2 launch gamantaray_boat_sim simple_ocean_gamantaray.launch.py navigation_mode:=ardupilot
+```
+src/
+├── gamantaray_boat_sim/          # Package utama simulasi
+│   ├── config/                   # Parameter Nav2, waypoint, RViz
+│   ├── gamantaray_boat_sim/      # Node-node Python (thruster, LiDAR, misi)
+│   ├── launch/                   # Launch file utama
+│   ├── models/                   # Model kapal, buoy, dan ocean wave
+│   ├── plugins/                  # Library gz-waves untuk hidrodinamika
+│   └── worlds/                   # World SDF lintasan TEKNOFEST
+└── gamantaray_nav2_bt_plugins/   # Custom Behavior Tree plugin untuk Nav2
 ```
 
-`nav2` memakai Nav2 dan `/cmd_vel_to_thrusters`. `manual` hanya menjalankan
-Gazebo, bridge, sensor, dan mapper `/cmd_vel`. `ardupilot` menjalankan
-ArduRover SITL + MAVROS + bridge LiDAR ke MAVLink proximity; Nav2 tidak
-dijalankan pada mode ini.
-Pada mode `ardupilot`, launch membuka terminal GUI terpisah untuk proses
-ArduRover SITL. Jika terminal GUI tidak tersedia, output SITL akan fallback ke
-terminal launch utama.
+## Dokumentasi Teknis
 
-RViz akan terbuka otomatis untuk menampilkan `/plan`, local costmap, TF, odometry,
-marker obstacle LiDAR, dan satu marker kotak sederhana untuk kapal. LiDAR ray
-tidak ditampilkan default supaya RViz lebih ringan; aktifkan dengan
-`show_lidar_rays:=true` hanya untuk debug. Mesh `.obj` asli kapal tetap
-ditampilkan di Gazebo. View RViz memakai target frame `base_link`, jadi kamera
-RViz mengikuti pergerakan kapal. Launch juga memakai GUI config Gazebo khusus
-agar panel/tab Gazebo disembunyikan dan jendela Gazebo/RViz dibuka dengan
-layout seperti referensi: Gazebo di kiri mulai setelah dock Ubuntu, RViz di
-kanan. Pada Wayland, window manager masih bisa mengabaikan posisi absolut
-window, tetapi ukuran dan layout RViz/Gazebo sudah disiapkan dari config
-package.
-
-Jika jendela Gazebo ditutup, launch akan ikut mematikan bridge, Nav2, dan node
-ROS lain. Ini sengaja dibuat supaya Nav2 tidak berjalan tanpa `/clock`,
-`/asv/odom`, dan `/asv/lidar/scan`. Node misi waypoint juga menunggu `/clock`,
-odom, LiDAR, dan TF `odom -> base_link` aktif sebelum mengirim goal Nav2.
-
-Untuk mengejar RTF lebih ringan tanpa visualisasi path, jalankan:
-
-```bash
-ros2 launch gamantaray_boat_sim simple_ocean_gamantaray.launch.py use_rviz:=false
-```
-
-RViz bisa dipakai sebagai tampilan utama navigasi. Gazebo tetap diperlukan
-sebagai simulator fisika kapal, thruster, wave, buoy, LiDAR, kamera, dan odom;
-RViz hanya viewer untuk path dan data ROS. Jadi mode kerja yang disarankan
-untuk debugging navigasi adalah membuka RViz dan memakai Gazebo hanya sebagai
-simulator di belakang. Jika ingin paling ringan, tutup/minimize tampilan Gazebo
-dan fokus pada RViz. Opsi benar-benar headless dapat ditambahkan kemudian agar
-Gazebo server berjalan tanpa GUI.
-
-Waypoint default ada di:
-
-```text
-src/gamantaray_boat_sim/config/tecnofest_waypoints.yaml
-```
-
-Panduan lengkap untuk mengatur waypoint, Nav2, costmap, LiDAR, path RViz, dan
-thruster ada di:
-
-```text
-src/gamantaray_boat_sim/NAVIGATION.md
-```
-
-## Kontrol Manual
-
-Kirim command velocity ke `/cmd_vel`. Node `cmd_vel_to_thrusters` akan
-mengubahnya menjadi command thrust kiri/kanan.
-
-Maju:
-
-```bash
-ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 1.0}, angular: {z: 0.0}}" -r 10
-```
-
-Belok kiri:
-
-```bash
-ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.5}, angular: {z: 0.8}}" -r 10
-```
-
-Jika hasil tes manual menunjukkan `angular.z` positif justru membuat kapal
-belok ke arah berlawanan, ubah parameter `yaw_sign` pada node
-`cmd_vel_to_thrusters` dari `1.0` ke `-1.0` di launch file.
-
-Stop:
-
-```bash
-ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0}, angular: {z: 0.0}}" -1
-```
-
-## Topic Utama
-
-Kontrol:
-
-- `/cmd_vel`
-- `/model/gamantaray_boat/joint/left_propeller_joint/cmd_thrust`
-- `/model/gamantaray_boat/joint/right_propeller_joint/cmd_thrust`
-- `/asv/control/thruster_status`
-
-Sensor dan navigasi:
-
-- `/asv/odom`
-- `/asv/imu/data`
-- `/asv/gps/fix`
-- `/asv/lidar/scan_raw`
-- `/asv/lidar/scan`
-- `/asv/lidar/points_filtered`
-- `/asv/visualization/lidar_rays` (debug opsional, default tidak diluncurkan)
-- `/asv/camera/front/image`
-- `/asv/camera/front/camera_info`
-- `/asv/perception/target_selection`
-- `/asv/navigation/status`
-- `/plan`
-- `/global_costmap/costmap`
-- `/local_costmap/costmap`
-- `/asv/visualization/boat_model`
-- `/asv/perception/lidar_obstacles`
-
-Frame sensor dari Gazebo memakai nama aktual:
-
-- LiDAR: `gamantaray_boat/base_link/lidar_sensor`
-- Kamera: `gamantaray_boat/base_link/front_camera_sensor`
-
-Launch juga menerbitkan alias TF `lidar_link` dan `front_camera_link` dari
-`base_link` untuk kompatibilitas.
-
-`/asv/lidar/scan_raw` adalah output langsung Gazebo. `/asv/lidar/scan` adalah
-hasil filter footprint kapal sendiri. Untuk Nav2, scan ini dikonversi menjadi
-`/asv/lidar/points_filtered` dan masuk ke STVL local costmap, sehingga noise
-ombak bisa hilang otomatis melalui `voxel_decay`. Path biru `/plan` adalah
-referensi global menuju waypoint; obstacle avoidance buoy dilakukan oleh local
-costmap dan DWB controller.
-
-## Mode ArduPilot
-
-Mode ArduPilot memakai ArduRover SITL dari:
-
-```text
-/home/ammar/ardu_ws/src/ardupilot/Tools/autotest/sim_vehicle.py
-```
-
-Plugin Gazebo ArduPilot diambil dari:
-
-```text
-/home/ammar/ardupilot_gazebo/build/libArduPilotPlugin.so
-```
-
-Parameter awal ASV ada di:
-
-```text
-src/gamantaray_boat_sim/config/ardupilot_asv.parm
-```
-
-Mission Planner adalah ground control station. Setelah launch
-`navigation_mode:=ardupilot`, hubungkan Mission Planner ke MAVLink UDP SITL
-yang keluar dari ArduPilot. Konfigurasi obstacle avoidance memakai
-`PRX1_TYPE=2`, `AVOID_ENABLE=7`, dan `OA_TYPE=3` untuk proximity MAVLink dan
-Dijkstra+BendyRuler. Ini adalah jalur awal integrasi; tuning waypoint AUTO /
-GUIDED dan validasi proximity di Mission Planner tetap perlu dilakukan saat
-SITL sudah connect.
-
-## Validasi Cepat
-
-Tes sensor:
-
-```bash
-ros2 topic echo --once /asv/odom nav_msgs/msg/Odometry
-ros2 topic echo --once /asv/lidar/scan sensor_msgs/msg/LaserScan
-ros2 topic echo --once /asv/camera/front/camera_info sensor_msgs/msg/CameraInfo
-```
-
-Tes gerak:
-
-```bash
-timeout 4s ros2 topic pub -r 20 /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 1.0}, angular: {z: 0.0}}"
-ros2 topic echo --once /asv/odom nav_msgs/msg/Odometry
-```
-
-Tes Nav2:
-
-```bash
-ros2 topic echo /asv/navigation/status std_msgs/msg/String
-```
-
-Status yang diharapkan saat misi mulai:
-
-```text
-nav2_waypoints_started:5
-```
-
-Kapal mulai dari `Startpoint` dan goal Nav2 pertama tetap GN1, sehingga urutan
-misi adalah Startpoint -> GN1 -> GN2 -> GN3 -> GN4 -> GN5.
-
-## Setting Parkur 1
-
-Atur posisi GN dan goal Nav2 di `src/gamantaray_boat_sim/config/tecnofest_waypoints.yaml`.
-Atur marker visual GN, Startpoint, spawn kapal, dan buoy Parkur 1 di
-`src/gamantaray_boat_sim/worlds/tecnofest_asv_course.sdf`. Untuk Parkur 1,
-pasangan yang dicek jaraknya adalah nama dengan indeks sama, misalnya
-`p1_s1_upper_01` dengan `p1_s1_lower_01`.
+| Dokumen | Isi |
+|---------|-----|
+| [NAVIGATION.md](NAVIGATION.md) | Alur navigasi, waypoint, obstacle avoidance, thruster, debug |
+| [doc_nav2.md](doc_nav2.md) | Dokumentasi lengkap kode Nav2 dan alur data |
+| [optimasi.md](optimasi.md) | Panduan optimasi performa navigasi dan costmap |

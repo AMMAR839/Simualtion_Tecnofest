@@ -445,3 +445,113 @@ OA_MARGIN_MAX 1.5
 `PRX1_TYPE=2` berarti proximity dari MAVLink. `OA_TYPE=3` berarti Dijkstra
 dengan BendyRuler. Untuk rover/boat, BendyRuler horizontal (`OA_BR_TYPE=1`)
 yang dipakai karena kapal bergerak di bidang XY.
+
+## Kontrol Manual
+
+Kirim command velocity ke `/cmd_vel`. Node `cmd_vel_to_thrusters` akan
+mengubahnya menjadi command thrust kiri/kanan.
+
+Maju:
+
+```bash
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 1.0}, angular: {z: 0.0}}" -r 10
+```
+
+Belok kiri:
+
+```bash
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.5}, angular: {z: 0.8}}" -r 10
+```
+
+Jika hasil tes manual menunjukkan `angular.z` positif justru membuat kapal
+belok ke arah berlawanan, ubah parameter `yaw_sign` pada node
+`cmd_vel_to_thrusters` dari `1.0` ke `-1.0` di launch file.
+
+Stop:
+
+```bash
+ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.0}, angular: {z: 0.0}}" -1
+```
+
+## Topic Utama
+
+Kontrol:
+
+- `/cmd_vel`
+- `/model/gamantaray_boat/joint/left_propeller_joint/cmd_thrust`
+- `/model/gamantaray_boat/joint/right_propeller_joint/cmd_thrust`
+- `/asv/control/thruster_status`
+
+Sensor dan navigasi:
+
+- `/asv/odom`
+- `/asv/imu/data`
+- `/asv/gps/fix`
+- `/asv/lidar/scan_raw`
+- `/asv/lidar/scan`
+- `/asv/lidar/points_filtered`
+- `/asv/visualization/lidar_rays` (debug opsional, default tidak diluncurkan)
+- `/asv/camera/front/image`
+- `/asv/camera/front/camera_info`
+- `/asv/perception/target_selection`
+- `/asv/navigation/status`
+- `/plan`
+- `/global_costmap/costmap`
+- `/local_costmap/costmap`
+- `/asv/visualization/boat_model`
+- `/asv/perception/lidar_obstacles`
+
+Frame sensor dari Gazebo memakai nama aktual:
+
+- LiDAR: `gamantaray_boat/base_link/lidar_sensor`
+- Kamera: `gamantaray_boat/base_link/front_camera_sensor`
+
+Launch juga menerbitkan alias TF `lidar_link` dan `front_camera_link` dari
+`base_link` untuk kompatibilitas.
+
+`/asv/lidar/scan_raw` adalah output langsung Gazebo. `/asv/lidar/scan` adalah
+hasil filter footprint kapal sendiri. Untuk Nav2, scan ini dikonversi menjadi
+`/asv/lidar/points_filtered` dan masuk ke STVL local costmap, sehingga noise
+ombak bisa hilang otomatis melalui `voxel_decay`. Path biru `/plan` adalah
+referensi global menuju waypoint; obstacle avoidance buoy dilakukan oleh local
+costmap dan DWB controller.
+
+## Validasi Cepat
+
+Tes sensor:
+
+```bash
+ros2 topic echo --once /asv/odom nav_msgs/msg/Odometry
+ros2 topic echo --once /asv/lidar/scan sensor_msgs/msg/LaserScan
+ros2 topic echo --once /asv/camera/front/camera_info sensor_msgs/msg/CameraInfo
+```
+
+Tes gerak:
+
+```bash
+timeout 4s ros2 topic pub -r 20 /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 1.0}, angular: {z: 0.0}}"
+ros2 topic echo --once /asv/odom nav_msgs/msg/Odometry
+```
+
+Tes Nav2:
+
+```bash
+ros2 topic echo /asv/navigation/status std_msgs/msg/String
+```
+
+Status yang diharapkan saat misi mulai:
+
+```text
+nav2_waypoints_started:5
+```
+
+Kapal mulai dari `Startpoint` dan goal Nav2 pertama tetap GN1, sehingga urutan
+misi adalah Startpoint -> GN1 -> GN2 -> GN3 -> GN4 -> GN5.
+
+## Setting Parkur 1
+
+Atur posisi GN dan goal Nav2 di `config/tecnofest_waypoints.yaml`.
+Atur marker visual GN, Startpoint, spawn kapal, dan buoy Parkur 1 di
+`worlds/tecnofest_asv_course.sdf`. Untuk Parkur 1,
+pasangan yang dicek jaraknya adalah nama dengan indeks sama, misalnya
+`p1_s1_upper_01` dengan `p1_s1_lower_01`.

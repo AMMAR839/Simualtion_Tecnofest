@@ -59,6 +59,10 @@ setup(
             (os.path.join('share', package_name, os.path.dirname(path)), [path])
             for path in package_files('plugins')
         ],
+        *[
+            (os.path.join('share', package_name, os.path.dirname(path)), [path])
+            for path in package_files('docs')
+        ],
     ],
     install_requires=['setuptools'],
     zip_safe=True,
